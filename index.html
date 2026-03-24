@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>osu! Live Note Timeline</title>
+    <style>
+        body { margin:0; background:transparent; overflow:hidden; font-family:Arial; }
+        canvas { display:block; background:transparent; }
+    </style>
+</head>
+<body>
+    <canvas id="c" width="3840" height="300"></canvas>
+
+    <!-- Load modules in the correct order -->
+    <script src="src/core-config.js"></script>
+    <script src="src/websocket-connection.js"></script>
+    <script src="src/beatmap-parser.js"></script>
+    <script src="src/texture-manager.js"></script>
+    <script src="src/sliders-manager.js"></script>
+    <script src="src/drawing-functions.js"></script>
+    <script src="src/key-visualization.js"></script>
+    <script src="src/miss-logic.js"></script>
+    <script src="src/timeline-logic.js"></script>
+    <script src="src/main-application.js"></script>
+</body>
+</html>
