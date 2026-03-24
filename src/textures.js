@@ -1,33 +1,12 @@
-import { 
-    hitCircleImg, 
-    hitCircleOverlayImg, 
-    sliderTickImg,
-    defaultTintedHitCircles,
-    beatmapTintedHitCircles,
-    defaultTintedSliderTicks,
-    beatmapTintedSliderTicks,
-    hasHitCircleTexture,
-    hasSliderTickTexture,
-    loadTextures,
-    createTintedVersions,
-    tintImage
-} from './state.js';
-
-import { 
-    sliderTrackOverride, 
-    sliderBorder, 
-    beatmapComboColors,
-    DEFAULT_COMBO_COLORS,
-    useBeatmapCombos
-} from './config.js';
+// ──────── TEXTURE LOADING AND IMAGE HANDLING ────────
 
 // Function to load textures with fallback support for @2x and normal variants
-export function loadTextures() {
+function loadTextures() {
     hasHitCircleTexture = false;
     hasSliderTickTexture = false;
 
     const tosuUrl = 'http://127.0.0.1:24050/files/skin/';
-
+    
     // Helper function to load an image with fallback support
     function loadImageWithFallback(image, src, fallbackSrc) {
         image.onload = () => { 
@@ -83,7 +62,7 @@ export function loadTextures() {
     loadImageWithFallback(sliderTickImg, tosuUrl + 'sliderscorepoint@2x.png', tosuUrl + 'sliderscorepoint.png');
 }
 
-export function createTintedVersions() {
+function createTintedVersions() {
     if (hitCircleImg.complete) {
         defaultTintedHitCircles = DEFAULT_COMBO_COLORS.map(c => tintImage(hitCircleImg, `rgb(${c.r},${c.g},${c.b})`));
         if (beatmapComboColors.length) beatmapTintedHitCircles = beatmapComboColors.map(c => tintImage(hitCircleImg, `rgb(${c.r},${c.g},${c.b})`));
@@ -95,7 +74,7 @@ export function createTintedVersions() {
     }
 }
 
-export function tintImage(baseImg, color) {
+function tintImage(baseImg, color) {
     const c = document.createElement('canvas'); c.width = baseImg.width; c.height = baseImg.height;
     const ct = c.getContext('2d'); ct.drawImage(baseImg, 0, 0);
     ct.globalCompositeOperation = 'source-atop'; ct.fillStyle = color; ct.fillRect(0, 0, c.width, c.height);

@@ -1,62 +1,3 @@
-import { 
-    SPEED_MULTIPLIER,
-    SCALE,
-    PLAYHEAD_X,
-    COLORIZE_SLIDER_BODY,
-    USE_BEATMAP_COMBOS,
-    TEXTURE_SCALE,
-    SPINNER_BAR_HEIGHT,
-    TARGET_FPS,
-    SHOW_DEBUG_PANEL,
-    KEY_LINE_THICKNESS,
-    KEY_BOX_SIZE,
-    KEY_BOX_Y,
-    KEY_BOX_SPACING,
-    KEY_BOX_Y_CENTERED,
-    TITLE_FONT_SIZE
-} from './config.js';
-
-import { 
-    gameStateName,
-    lastReceiveTime,
-    lastCommonLiveTime,
-    lastCommonRealTime,
-    currentSpeed,
-    lastLiveTimeChangeReal,
-    speedAccumTosu,
-    speedAccumReal,
-    isTimelineLocked,
-    lockedBaseTime,
-    lockedBaseRealTime,
-    lockedCurrentSpeed,
-    lastPreciseTime,
-    lastPreciseRealTime,
-    hitErrorCount,
-    keyStrokes,
-    activeStrokes,
-    lastCounts,
-    keyBoxStates,
-    hitObjects,
-    timingPoints,
-    beatmapComboColors,
-    beatmapOD,
-    beatmapSliderTickRate,
-    lastChecksum,
-    mapTitle,
-    sliderTrackOverride,
-    sliderBorder,
-    sliderStyle,
-    lastCombo,
-    ourDetectedMissCount,
-    resetTimelineState,
-    markSliderAsMissed,
-    fetchBeatmap
-} from './state.js';
-
-import { connect } from './websocket.js';
-import { loadTextures, createTintedVersions, tintImage } from './textures.js';
-import { draw } from './drawing.js';
-
 // ──────── GLOBAL VARIABLES ────────
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
@@ -96,7 +37,7 @@ const hitErrorLeeway = 150;
 let firstUnjudgedIndex = -1;
 
 // ──────── SLIDER STYLE FUNCTIONS ────────
-export function getSliderStyles(trackRgb, borderRgb, isMissed = false) {
+function getSliderStyles(trackRgb, borderRgb, isMissed = false) {
     let [r, g, b] = trackRgb;
     let border = borderRgb;
     let alpha = 0.8;
@@ -118,7 +59,7 @@ export function getSliderStyles(trackRgb, borderRgb, isMissed = false) {
 }
 
 // ──────── HIT CIRCLE DRAWING ────────
-export function drawHitCircle(posX, colorIndex, isMissed = false) {
+function drawHitCircle(posX, colorIndex, isMissed = false) {
     if (posX < -100 || posX > canvas.width + 100) return;
     
     ctx.globalAlpha = isMissed ? 0.4 : 1.0;

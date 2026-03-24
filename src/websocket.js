@@ -1,34 +1,4 @@
-import { 
-    gameStateName, 
-    lastReceiveTime, 
-    lastCommonLiveTime, 
-    lastCommonRealTime, 
-    currentSpeed, 
-    lastLiveTimeChangeReal, 
-    speedAccumTosu, 
-    speedAccumReal,
-    isTimelineLocked,
-    lockedBaseTime,
-    lockedBaseRealTime,
-    lockedCurrentSpeed,
-    lastPreciseTime,
-    lastPreciseRealTime,
-    hitErrorCount,
-    keyStrokes,
-    activeStrokes,
-    lastCounts,
-    keyBoxStates,
-    lastCombo,
-    ourDetectedMissCount,
-    resetTimelineState,
-    markSliderAsMissed,
-    fetchBeatmap,
-    connect
-} from './state.js';
-
-let wsCommon;
-let wsPrecise;
-
+// ──────── WEBSOCKET CONNECTION HANDLING ────────
 function connect() {
     if (wsCommon) wsCommon.close();
     if (wsPrecise) wsPrecise.close();
@@ -40,6 +10,7 @@ function connect() {
         if (data.state?.name) gameStateName = data.state.name;
         
         if (data.beatmap) {
+            mapTitle = `${data.beatmap.artist} - ${data.beatmap.title} [${data.beatmap.version || 'Unknown'}]`;
             const cs = data.beatmap.checksum;
             if (cs && cs !== lastChecksum) {
                 lastChecksum = cs;
@@ -156,8 +127,9 @@ function connect() {
                 lastCounts[k] = kCount;
                 keyBoxStates[k] = isDown;
             });
-            
-            if (hitErrors) {
+        }
+        
+        if (hitErrors) {
             const newCount = hitErrors.length;
             if (newCount < hitErrorCount) {
                 hitErrorCount = newCount; isTimelineLocked = false;
@@ -250,8 +222,5 @@ function connect() {
                 }
             }
         };
-        wsPrecise.onclose = () => setTimeout(connect, 2000);
-    }
+    wsPrecise.onclose = () => setTimeout(connect, 2000);
 }
-
-export { connect };

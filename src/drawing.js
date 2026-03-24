@@ -1,55 +1,5 @@
-import { 
-    canvas, 
-    ctx, 
-    sliderBuffer, 
-    sctx,
-    playheadX,
-    scale,
-    timingPoints,
-    hitObjects,
-    beatmapComboColors,
-    DEFAULT_COMBO_COLORS,
-    useBeatmapCombos,
-    KEY_LINE_THICKNESS,
-    KEY_BOX_SIZE,
-    KEY_BOX_Y,
-    KEY_BOX_SPACING,
-    KEY_BOX_Y_CENTERED,
-    SPINNER_BAR_HEIGHT,
-    TEXTURE_SCALE,
-    COLORIZE_SLIDER_BODY,
-    sliderTrackOverride,
-    sliderBorder,
-    getSliderStyles,
-    drawHitCircle
-} from './main.js';
-
-import { 
-    keyStrokes,
-    keyBoxStates,
-    lastCommonLiveTime,
-    lastPreciseTime,
-    isTimelineLocked,
-    lockedBaseTime,
-    lockedBaseRealTime,
-    lockedCurrentSpeed,
-    currentSpeed,
-    gameStateName,
-    lastReceiveTime,
-    beatmapOD,
-    hitWindow50,
-    tosuLeeway,
-    hitErrorLeeway,
-    firstUnjudgedIndex,
-    ourDetectedMissCount
-} from './state.js';
-
-import { 
-    SPEED_MULTIPLIER,
-    SHOW_DEBUG_PANEL
-} from './config.js';
-
-export function draw() {
+// ──────── DRAWING FUNCTIONS ────────
+function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const now = performance.now();
     if (now - lastReceiveTime > 1000) { currentSpeed = 0; isTimelineLocked = false; }
@@ -135,7 +85,7 @@ export function draw() {
         let alpha = xEnd < 100 ? Math.max(0, xEnd / 100) : 1;
         ctx.globalAlpha = Math.max(0.1, alpha);
 
-        const col = ((useBeatmapCombos && beatmapComboColors.length > 0) ? beatmapComboColors : DEFAULT_COMBO_COLORS)[note.comboColorIndex % (useBeatmapCombos && beatmapComboColors.length ? beatmapComboColors.length : 4)];
+        const col = ((USE_BEATMAP_COMBOS && beatmapComboColors.length > 0) ? beatmapComboColors : DEFAULT_COMBO_COLORS)[note.comboColorIndex % (USE_BEATMAP_COMBOS && beatmapComboColors.length ? beatmapComboColors.length : 4)];
 
         if (note.type === 'slider') {
             let trackDiam = hasHitCircleTexture && hitCircleImg ? hitCircleImg.height * TEXTURE_SCALE * 0.95 : 20;
@@ -182,7 +132,7 @@ export function draw() {
                     if (note.isMissed && hasSliderTickTexture) {
                         tickCanvas = sliderTickImg;
                     } else if (hasSliderTickTexture) {
-                        const activeTinted = (useBeatmapCombos && beatmapTintedSliderTicks.length > 0) ? beatmapTintedSliderTicks : defaultTintedSliderTicks;
+                        const activeTinted = (USE_BEATMAP_COMBOS && beatmapTintedSliderTicks.length > 0) ? beatmapTintedSliderTicks : defaultTintedSliderTicks;
                         tickCanvas = activeTinted[note.comboColorIndex % activeTinted.length];
                     }
 
@@ -221,7 +171,7 @@ export function draw() {
     for (let stroke of keyStrokes) {
         let sTime = stroke.startTime || currentTime;
         let eTime = stroke.endTime !== null ? stroke.endTime : currentTime;
-        
+
         if (eTime < currentTime - pastMs) continue;
         if (sTime > currentTime + futureMs) continue;
 
@@ -370,12 +320,14 @@ export function draw() {
         ctx.fillText(`Game State: ${gameStateName}`, canvas.width - 290, y); y += 20;
         ctx.fillText(`Key States:`, canvas.width - 290, y); y += 20;
         for (const key in keyBoxStates) {
-            ctx.fillText(`${key}: ${keyBoxStates[key] ? 'DOWN' : 'UP'}`, canvas.width - 290, y); y += 20;
+            ctx.fillText(`${key}: ${keyBoxStates[key] ? 'DOWN' : 'UP'}`, canvas.width - 290, y);
+            y += 20;
         }
         ctx.fillText(`Active Strokes:`, canvas.width - 290, y); y += 20;
         for (const key in activeStrokes) {
             const stroke = activeStrokes[key];
-            ctx.fillText(`${key}: ${stroke ? 'ACTIVE' : 'INACTIVE'}`, canvas.width - 290, y); y += 20;
+            ctx.fillText(`${key}: ${stroke ? 'ACTIVE' : 'INACTIVE'}`, canvas.width - 290, y);
+            y += 20;
         }
         ctx.fillText(`Key Strokes Count: ${keyStrokes.length}`, canvas.width - 290, y); y += 20;
         if (keyStrokes.length > 0) {

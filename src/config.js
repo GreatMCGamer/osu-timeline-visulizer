@@ -11,6 +11,10 @@ export const SPINNER_BAR_HEIGHT = 40;
 export const TARGET_FPS = 480;
 export const SHOW_DEBUG_PANEL = false;
 
+// ──────── CANVAS CONFIG ────────
+export const CANVAS_WIDTH = 1200;
+export const CANVAS_HEIGHT = 800;
+
 // ──────── KEYPRESS VISUALIZATION CONFIG ────────
 export const KEY_LINE_THICKNESS = 20;
 export const KEY_BOX_SIZE = 24;
