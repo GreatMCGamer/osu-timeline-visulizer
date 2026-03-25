@@ -1,6 +1,9 @@
-# osu! Live Note Timeline
+# osu! Live Note Timeline for OBS
 
 A real-time visualization of osu! beatmaps that displays hit objects, key presses, and timing information. This project visualizes osu! gameplay in real-time using data from tosu/gosumemory.
+
+Simply add index.html as Browser source on OBS.
+And Now when you start playing a map, the timeline will render.
 
 ## Project Structure
 
