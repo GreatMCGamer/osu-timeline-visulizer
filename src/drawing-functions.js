@@ -29,7 +29,9 @@ function drawHitCircle(posX, colorIndex, isMissed = false) {
             const col = (useBeatmapCombos && beatmapComboColors.length ? beatmapComboColors : DEFAULT_COMBO_COLORS)[colorIndex % 4];
             ctx.fillStyle = `rgb(${col.r},${col.g},${col.b})`;
         }
-        ctx.beginPath(); ctx.arc(posX, Y_CENTERED, 10, 0, Math.PI*2); ctx.fill();
+        // Calculate dynamic circle radius based on beatmap OD
+        const circleRadius = 199.5 - (10 * beatmapOD);
+        ctx.beginPath(); ctx.arc(posX, Y_CENTERED, circleRadius, 0, Math.PI*2); ctx.fill();
     }
     ctx.globalAlpha = 1.0;
 }
@@ -127,7 +129,9 @@ function draw() {
         const col = ((useBeatmapCombos && beatmapComboColors.length > 0) ? beatmapComboColors : DEFAULT_COMBO_COLORS)[note.comboColorIndex % (useBeatmapCombos && beatmapComboColors.length ? beatmapComboColors.length : 4)];
 
         if (note.type === 'slider') {
-            let trackDiam = hasHitCircleTexture && hitCircleImg ? hitCircleImg.height * TEXTURE_SCALE * 0.95 : 20;
+            // Calculate dynamic slider track diameter based on beatmap OD
+            const circleRadius = 199.5 - (10 * beatmapOD);
+            let trackDiam = hasHitCircleTexture && hitCircleImg ? hitCircleImg.height * TEXTURE_SCALE * 0.95 : circleRadius * 2;
             const styles = getSliderStyles(COLORIZE_SLIDER_BODY ? [col.r, col.g, col.b] : sliderTrackOverride, sliderBorder, note.isMissed);
             const sw = Math.abs(xEnd - xStart) + trackDiam * 2;
             
@@ -183,7 +187,7 @@ function draw() {
                     } else {
                         ctx.fillStyle = note.isMissed ? `rgba(100,100,100,0.5)` : `rgb(${col.r},${col.g},${col.b})`;
                         ctx.beginPath();
-                        ctx.arc(tickX, Y_CENTERED, 5.5, 0, Math.PI * 2);
+                        ctx.arc(tickX, Y_CENTERED, circleRadius * 0.275, 0, Math.PI * 2);
                         ctx.fill();
                     }
 
