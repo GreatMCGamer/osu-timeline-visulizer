@@ -3,69 +3,106 @@
 
 async function fetchBeatmap() {
     try {
-        const res = await fetch('http://127.0.0.1:24050/files/beatmap/file');
+        // Appending the checksum query parameter completely prevents the browser 
+        // from caching the old beatmap file, fixing the timeline freezing issue.
+        const cacheBuster = typeof lastChecksum !== 'undefined' ? lastChecksum : Date.now();
+        const res = await fetch(`http://127.0.0.1:24050/files/beatmap/file?cs=${cacheBuster}`);
         const text = await res.text();
         const result = parseOsuFile(text);
+        
         hitObjects = result.objs;
         timingPoints = result.timing;
         beatmapComboColors = result.beatmapCombos || [];
         beatmapOD = result.od;
         beatmapSliderTickRate = result.sliderTickRate || 1.0;
+        
         loadTextures();
-    } catch(e) { console.error(e); }
+    } catch(e) { 
+        console.error("Failed to parse or load beatmap file:", e); 
+    }
 }
 
 function parseOsuFile(osuText) {
-    const lines = osuText.split('\n');
-    let section = '', sliderMult = 1.0, timing = [], objs = [], beatmapComboColorsLocal = [], currentComboIndex = 0;
-    let od = 8.0; 
-    let sliderTickRate = 1.0;
+    // Memory optimization: Extract only the sections we need before splitting into arrays.
+    // This prevents the browser from crashing/freezing on massive [Events] (Storyboard) sections.
+    const sectionsToParse = ['Difficulty', 'Colours', 'TimingPoints', 'HitObjects'];
+    let timing = [], objs = [], beatmapComboColorsLocal = [], currentComboIndex = 0;
+    let od = 8.0, sliderTickRate = 1.0, sliderMult = 1.0;
     
-    for (let line of lines) {
-        line = line.trim();
-        if (line.startsWith('[')) { section = line; continue; }
-        if (section === '[Difficulty]') {
-            if (line.startsWith('SliderMultiplier:')) sliderMult = parseFloat(line.split(':')[1]) || 1.0;
-            if (line.startsWith('SliderTickRate:')) sliderTickRate = parseFloat(line.split(':')[1]) || 1.0;
-            if (line.startsWith('OverallDifficulty:')) od = parseFloat(line.split(':')[1]) || 8.0;
+    for (const sectionName of sectionsToParse) {
+        // Find where the section starts safely
+        let startIndex = osuText.indexOf(`\n[${sectionName}]`);
+        if (startIndex === -1 && osuText.startsWith(`[${sectionName}]`)) {
+            startIndex = 0;
         }
-        if (section === '[Colours]' && line) {
-            const match = line.match(/Combo\d+:\s*(\d+),\s*(\d+),\s*(\d+)/);
-            if (match) beatmapComboColorsLocal.push({ r: parseInt(match[1]), g: parseInt(match[2]), b: parseInt(match[3]) });
-        }
-        if (section === '[TimingPoints]' && line) {
-            const tp = line.split(',');
-            if (tp.length >= 7) timing.push({ time: parseFloat(tp[0]), beatLength: parseFloat(tp[1]), uninherited: parseInt(tp[6]) === 1 });
-        }
-        if (section === '[HitObjects]' && line) {
-            const parts = line.split(',');
-            if (parts.length < 4) continue;
-            const time = parseInt(parts[2]), type = parseInt(parts[3]);
-            let noteType = 'circle', endTime = time;
-            if (type & 4) currentComboIndex = (currentComboIndex + 1) % 8;
-            if (type & 2) {
-                noteType = 'slider';
-                const slides = parseInt(parts[6]) || 1, length = parseFloat(parts[7]) || 0;
-                let currentBeatLength = 600, currentSV = sliderMult;
-                for (let tp of timing) {
-                    if (tp.time > time) break;
-                    if (tp.uninherited) currentBeatLength = tp.beatLength;
-                    else currentSV = sliderMult * (-100 / (tp.beatLength || 1));
+        
+        if (startIndex !== -1) {
+            // Find the next section header to grab just this chunk of text
+            let endIndex = osuText.indexOf('\n[', startIndex + 1);
+            let sectionText = endIndex !== -1 ? osuText.substring(startIndex, endIndex) : osuText.substring(startIndex);
+            
+            // Now we only split a small, relevant chunk of the file
+            const lines = sectionText.split('\n');
+            for (let line of lines) {
+                line = line.trim();
+                if (!line || line.startsWith('//') || line.startsWith('[')) continue;
+                
+                if (sectionName === 'Difficulty') {
+                    if (line.startsWith('SliderMultiplier:')) sliderMult = parseFloat(line.split(':')[1]) || 1.0;
+                    if (line.startsWith('SliderTickRate:')) sliderTickRate = parseFloat(line.split(':')[1]) || 1.0;
+                    if (line.startsWith('OverallDifficulty:')) od = parseFloat(line.split(':')[1]) || 8.0;
                 }
-                const duration = slides * length * currentBeatLength / (100 * currentSV);
-                endTime = time + (isFinite(duration) ? duration : 10000);
-            } else if (type & 8) {
-                noteType = 'spinner';
-                endTime = parseInt(parts[5]) || time + 1000;
+                else if (sectionName === 'Colours') {
+                    if (line.startsWith('Combo')) {
+                        const parts = line.split(':')[1].split(',');
+                        if (parts.length >= 3) {
+                            beatmapComboColorsLocal.push({ r: parseInt(parts[0]), g: parseInt(parts[1]), b: parseInt(parts[2]) });
+                        }
+                    }
+                }
+                else if (sectionName === 'TimingPoints') {
+                    const tp = line.split(',');
+                    if (tp.length >= 2) {
+                        timing.push({ time: parseFloat(tp[0]), beatLength: parseFloat(tp[1]), uninherited: parseInt(tp[6]) === 1 });
+                    }
+                }
+                else if (sectionName === 'HitObjects') {
+                    const parts = line.split(',');
+                    if (parts.length < 4) continue;
+                    
+                    const time = parseInt(parts[2]), type = parseInt(parts[3]);
+                    let noteType = 'circle', endTime = time;
+                    
+                    if (type & 4) currentComboIndex = (currentComboIndex + 1) % 8;
+                    
+                    if (type & 2) {
+                        noteType = 'slider';
+                        const slides = parseInt(parts[6]) || 1, length = parseFloat(parts[7]) || 0;
+                        let currentBeatLength = 600, currentSV = sliderMult;
+                        
+                        for (let tp of timing) {
+                            if (tp.time > time) break;
+                            if (tp.uninherited) currentBeatLength = tp.beatLength;
+                            else currentSV = sliderMult * (-100 / (tp.beatLength || 1));
+                        }
+                        const duration = slides * length * currentBeatLength / (100 * currentSV);
+                        endTime = time + (isFinite(duration) ? duration : 10000);
+                    } else if (type & 8) {
+                        noteType = 'spinner';
+                        endTime = parseInt(parts[5]) || time + 1000;
+                    }
+                    
+                    objs.push({ startTime: time, endTime, type: noteType, comboColorIndex: currentComboIndex, judged: false, isMissed: false });
+                }
             }
-            objs.push({ startTime: time, endTime, type: noteType, comboColorIndex: currentComboIndex, judged: false, isMissed: false });
         }
     }
+    
     return { 
-        objs: objs.sort((a,b)=>a.startTime-b.startTime), 
+        objs: objs.sort((a,b) => a.startTime - b.startTime),
         timing, 
-        beatmapCombos: beatmapComboColorsLocal, 
         od, 
-        sliderTickRate
+        sliderTickRate, 
+        beatmapCombos: beatmapComboColorsLocal 
     };
 }
