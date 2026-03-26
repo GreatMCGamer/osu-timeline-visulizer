@@ -327,7 +327,33 @@ function draw() {
     ctx.fillText(debugInfo, 15, canvas.height - 10);
 
     if (SHOW_DEBUG_PANEL) {
+         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(canvas.width - 300, 0, 300, canvas.height);
+        ctx.fillStyle = 'white';
+        ctx.font = '14px Arial';
+        ctx.fillText('DEBUG PANEL', canvas.width - 290, 25);
+        let y = 45;
+        ctx.fillText(`Game State: ${gameStateName}`, canvas.width - 290, y); y += 20;
+        ctx.fillText(`Key States:`, canvas.width - 290, y); y += 20;
+        for (const key in keyBoxStates) {
+            ctx.fillText(`${key}: ${keyBoxStates[key] ? 'DOWN' : 'UP'}`, canvas.width - 290, y);
+            y += 20;
+        }
+        ctx.fillText(`Active Strokes:`, canvas.width - 290, y); y += 20;
+        for (const key in activeStrokes) {
+            const stroke = activeStrokes[key];
+            ctx.fillText(`${key}: ${stroke ? 'ACTIVE' : 'INACTIVE'}`, canvas.width - 290, y);
+            y += 20;
+        }
+        ctx.fillText(`Key Strokes Count: ${keyStrokes.length}`, canvas.width - 290, y); y += 20;
+        if (keyStrokes.length > 0) {
+            ctx.fillText(`Last Stroke:`, canvas.width - 290, y); y += 20;
+            const lastStroke = keyStrokes[keyStrokes.length - 1];
+            ctx.fillText(`  Key: ${lastStroke.key}`, canvas.width - 290, y); y += 20;
+            ctx.fillText(`  Start: ${lastStroke.startTime}`, canvas.width - 290, y); y += 20;
+            ctx.fillText(`  End: ${lastStroke.endTime !== null ? lastStroke.endTime : 'ACTIVE'}`, canvas.width - 290, y);
         // debug panel unchanged
+        }
     }
 
     requestAnimationFrame(draw);
