@@ -84,6 +84,22 @@ function connect() {
         if (data.currentTime !== undefined) {
             lastPreciseTime = data.currentTime;
             lastPreciseRealTime = now;
+
+            // ──────── NEW: DESYNC / LAG DRIFT DETECTION ────────
+            // If the timeline is currently interpolating time independently, 
+            // check if it has drifted from the actual game client time.
+            if (isTimelineLocked) {
+                // Calculate what the drawing loop thinks the time is right now
+                let predictedTime = lockedBaseTime + (now - lockedBaseRealTime) * lockedCurrentSpeed * SPEED_MULTIPLIER;
+                
+                // If the difference is greater than 50ms, the game likely lagged
+                if (Math.abs(predictedTime - data.currentTime) > 50) {
+                    // Resync the system by snapping the lock directly to the true precise time
+                    lockedBaseTime = data.currentTime;
+                    lockedBaseRealTime = now;
+                    // We leave isTimelineLocked = true so it continues smoothly without waiting for a new hit error
+                }
+            }
         }
         
         if (data.keys) {
