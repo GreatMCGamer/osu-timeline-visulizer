@@ -1,13 +1,15 @@
 // ──────── DRAWING FUNCTIONS ────────
 // Handles primary visual rendering for HitCircles, Spinners, Map text, and the Debug panel.
+// Now includes dynamic judgment-meter sizing for hit circles, slider heads, bodies, and ticks.
 
-function drawHitCircle(posX, colorIndex, isMissed = false) {
+function drawHitCircle(posX, colorIndex, isMissed = false, diameter = 20) {
     if (posX < -100 || posX > canvas.width + 100) return;
     
     ctx.globalAlpha = isMissed ? 0.4 : 1.0;
 
     if (isMissed && hasHitCircleTexture && hitCircleImg) {
-        const w = hitCircleImg.width * TEXTURE_SCALE, h = hitCircleImg.height * TEXTURE_SCALE;
+        const w = diameter;
+        const h = diameter;
         const dx = posX - w/2, dy = Y_CENTERED - h/2;
         ctx.drawImage(hitCircleImg, dx, dy, w, h);
         if (hitCircleOverlayImg && hitCircleOverlayImg.complete) ctx.drawImage(hitCircleOverlayImg, dx, dy, w, h);
@@ -18,7 +20,8 @@ function drawHitCircle(posX, colorIndex, isMissed = false) {
     const activeTinted = (useBeatmapCombos && beatmapTintedHitCircles.length > 0) ? beatmapTintedHitCircles : defaultTintedHitCircles;
     const tintedCanvas = activeTinted[colorIndex % activeTinted.length];
     if (hasHitCircleTexture && tintedCanvas) {
-        const w = tintedCanvas.width * TEXTURE_SCALE, h = tintedCanvas.height * TEXTURE_SCALE;
+        const w = diameter;
+        const h = diameter;
         const dx = posX - w/2, dy = Y_CENTERED - h/2;
         ctx.drawImage(tintedCanvas, dx, dy, w, h);
         if (hitCircleOverlayImg && hitCircleOverlayImg.complete) ctx.drawImage(hitCircleOverlayImg, dx, dy, w, h);
@@ -29,7 +32,9 @@ function drawHitCircle(posX, colorIndex, isMissed = false) {
             const col = (useBeatmapCombos && beatmapComboColors.length ? beatmapComboColors : DEFAULT_COMBO_COLORS)[colorIndex % 4];
             ctx.fillStyle = `rgb(${col.r},${col.g},${col.b})`;
         }
-        ctx.beginPath(); ctx.arc(posX, Y_CENTERED, 10, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); 
+        ctx.arc(posX, Y_CENTERED, diameter / 2, 0, Math.PI*2); 
+        ctx.fill();
     }
     ctx.globalAlpha = 1.0;
 }
@@ -52,10 +57,15 @@ function draw() {
         keyStrokes.shift();
     }
 
-    const hitWindow50 = 199.5 - (beatmapOD * 6);
+    // ──────── CORRECT HIT WINDOW (clamped for safety) ────────
+    const hitWindow50 = Math.max(0, 199.5 - (beatmapOD * 10));
     const tosuLeeway = 350; 
     const hitErrorLeeway = 150;
 
+    // Dynamic diameter for judgment meter (goal: 1 px = 1 ms when scale = 1.0)
+    const judgmentDiameterPx = hitWindow50 * 2 * scale;
+
+    // Miss detection & key-stroke handling (unchanged logic)
     for (let note of hitObjects) {
         if (!note.judged) {
             const tooLateTime = note.endTime + hitWindow50;
@@ -126,8 +136,48 @@ function draw() {
 
         const col = ((useBeatmapCombos && beatmapComboColors.length > 0) ? beatmapComboColors : DEFAULT_COMBO_COLORS)[note.comboColorIndex % (useBeatmapCombos && beatmapComboColors.length ? beatmapComboColors.length : 4)];
 
+        // ──────── JUDGMENT METER BAR (now perfectly matched to circle size) ────────
+        if (note.type === 'circle' || note.type === 'slider') {
+            const barHeight = 32;
+            const barY = Y_CENTERED - barHeight / 2;
+            const barX = xStart - (judgmentDiameterPx / 2);
+            const barWidth = judgmentDiameterPx;
+
+            if (barX < canvas.width + 100 && barX + barWidth > -100) {
+                ctx.save();
+
+                // Outer 50 window (faintest)
+                ctx.globalAlpha = note.isMissed ? 0.25 : 0.40;
+                ctx.fillStyle = note.isMissed 
+                    ? 'rgba(160, 160, 160, 0.7)' 
+                    : `rgba(${col.r}, ${col.g}, ${col.b}, 0.5)`;
+                ctx.fillRect(barX, barY, barWidth, barHeight);
+
+                // Middle 100 window
+                const hitWindow100 = Math.max(0, 139.5 - (8 * beatmapOD));
+                const half100 = hitWindow100 * scale;
+                ctx.globalAlpha = note.isMissed ? 0.35 : 0.55;
+                ctx.fillStyle = note.isMissed 
+                    ? 'rgba(200, 200, 100, 0.8)' 
+                    : `rgba(${col.r}, ${col.g}, ${col.b}, 0.75)`;
+                ctx.fillRect(xStart - half100, barY + 4, half100 * 2, barHeight - 8);
+
+                // Inner 300 window (brightest)
+                const hitWindow300 = Math.max(0, 79.5 - (6 * beatmapOD));
+                const half300 = hitWindow300 * scale;
+                ctx.globalAlpha = note.isMissed ? 0.40 : 0.80;
+                ctx.fillStyle = note.isMissed 
+                    ? 'rgba(100, 255, 120, 0.9)' 
+                    : `rgba(${col.r}, ${col.g}, ${col.b}, 1)`;
+                ctx.fillRect(xStart - half300, barY + 8, half300 * 2, barHeight - 16);
+
+                ctx.restore();
+            }
+        }
+
         if (note.type === 'slider') {
-            let trackDiam = hasHitCircleTexture && hitCircleImg ? hitCircleImg.height * TEXTURE_SCALE * 0.95 : 20;
+            // Slider body now scales with the judgment circle
+            let trackDiam = hasHitCircleTexture && hitCircleImg ? judgmentDiameterPx * 0.95 : 20;
             const styles = getSliderStyles(COLORIZE_SLIDER_BODY ? [col.r, col.g, col.b] : sliderTrackOverride, sliderBorder, note.isMissed);
             const sw = Math.abs(xEnd - xStart) + trackDiam * 2;
             
@@ -176,7 +226,9 @@ function draw() {
                     }
 
                     if (tickCanvas) {
-                        const tickScaleFactor = TEXTURE_SCALE * 0.65;
+                        // Ticks scale proportionally to the new circle size (preserves original visual ratio)
+                        const refWidth = hasHitCircleTexture && hitCircleImg ? hitCircleImg.width : 260;
+                        const tickScaleFactor = 0.65 * (judgmentDiameterPx / refWidth);
                         const tickW = tickCanvas.width * tickScaleFactor;
                         const tickH = tickCanvas.height * tickScaleFactor;
                         ctx.drawImage(tickCanvas, tickX - tickW / 2, Y_CENTERED - tickH / 2, tickW, tickH);
@@ -196,11 +248,12 @@ function draw() {
         }
 
         if (note.type === 'circle' || note.type === 'slider') {
-            drawHitCircle(xStart, note.comboColorIndex, note.isMissed);
+            drawHitCircle(xStart, note.comboColorIndex, note.isMissed, judgmentDiameterPx);
         }
         ctx.globalAlpha = 1;
     }
 
+    // Key visualization, playhead, title, debug (unchanged)
     ctx.lineWidth = KEY_LINE_THICKNESS;
     ctx.lineCap = 'round';
     const gap = 4;
@@ -250,11 +303,8 @@ function draw() {
     ctx.beginPath(); ctx.moveTo(playheadX, Y_CENTERED - 45); ctx.lineTo(playheadX, Y_CENTERED + 45); ctx.stroke();
     ctx.fillStyle = '#0ff';
     
-    // Render beatmap title
     renderBeatmapTitle();
     
-    ctx.font = '14px Arial';
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.font = '14px Arial';
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.fillText(`${(currentTime/1000).toFixed(2)}s | Speed: ${currentSpeed.toFixed(2)}x | ${isTimelineLocked ? 'LOCKED ✓' : 'syncing'}`, 15, 95);

@@ -6,7 +6,7 @@ const ctx = canvas.getContext('2d');
 
 // ──────── USER CONFIG ────────
 const SPEED_MULTIPLIER = 1.0;
-let scale = 0.6;
+let scale = 1.0;
 let playheadX = 2669;
 
 const COLORIZE_SLIDER_BODY = false; 
