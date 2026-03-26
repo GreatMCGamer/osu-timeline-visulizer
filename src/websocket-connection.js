@@ -183,6 +183,11 @@ function connect() {
                         bestObj.isMissed = false;
                         snapTimeObj = bestObj;
 
+                        // ──────── NEW: assign lane from the matching key stroke ────────
+                        if (bestStroke) {
+                            bestObj.hitLane = (bestStroke.key === 'k1' || bestStroke.key === 'm1') ? 0 : 1;
+                        }
+
                         for (let obj of hitObjects) {
                             if (obj === bestObj) break;
                             if (!obj.judged) {
@@ -191,26 +196,22 @@ function connect() {
                                     obj.isMissed = true;
                                     ourDetectedMissCount++;
                                 }
+                                obj.hitLane = -1; // previous unjudged notes stay centered
                             }
                         }
 
                         if (bestStroke) {
-                                bestStroke.matched = true;
-
-                                let wasMicrotap = bestStroke.endTime !== null && (bestStroke.endTime - bestStroke.startTime <= 2);
-                                const trueHitTime = bestObj.startTime + error;
-                                
-                                if (bestStroke.startTime !== null) {
-                                    bestStroke.startTime = trueHitTime;
-                                }
-                                
-                                if (wasMicrotap && bestStroke.endTime !== null) {
-                                    bestStroke.endTime = trueHitTime + 1;
-                                } else if (bestStroke.endTime !== null && bestStroke.endTime <= trueHitTime) {
-                                    bestStroke.endTime = trueHitTime + 1; 
-                                }
+                            bestStroke.matched = true;
+                            let wasMicrotap = bestStroke.endTime !== null && (bestStroke.endTime - bestStroke.startTime <= 2);
+                            const trueHitTime = bestObj.startTime + error;
+                            if (bestStroke.startTime !== null) bestStroke.startTime = trueHitTime;
+                            if (wasMicrotap && bestStroke.endTime !== null) {
+                                bestStroke.endTime = trueHitTime + 1;
+                            } else if (bestStroke.endTime !== null && bestStroke.endTime <= trueHitTime) {
+                                bestStroke.endTime = trueHitTime + 1; 
                             }
                         }
+                    }
                     }
 
                     if (!isTimelineLocked && snapTimeObj) {
@@ -236,7 +237,11 @@ function resetTimelineState() {
     activeStrokes = { k1: null, k2: null, m1: null, m2: null };
     lastCounts = { k1: 0, k2: 0, m1: 0, m2: 0 };
     keyBoxStates = { k1: false, k2: false, m1: false, m2: false };
-    if (hitObjects) hitObjects.forEach(h => { h.judged = false; h.isMissed = false; });
+    if (hitObjects) hitObjects.forEach(h => { 
+        h.judged = false; 
+        h.isMissed = false;
+        h.hitLane = -1;   // ← NEW
+    });
 
     lastCombo = 0;
     ourDetectedMissCount = 0;

@@ -131,7 +131,7 @@ function parseOsuFile(osuText) {
                         endTime = parseInt(parts[5]) || time + 1000;
                     }
                     
-                    objs.push({ startTime: time, endTime, type: noteType, comboColorIndex: currentComboIndex, judged: false, isMissed: false });
+                    objs.push({ startTime: time, endTime, type: noteType, comboColorIndex: currentComboIndex, judged: false, isMissed: false, hitLane: -1 });
                 }
             }
         }

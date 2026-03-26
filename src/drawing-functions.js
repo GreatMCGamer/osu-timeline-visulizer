@@ -2,7 +2,7 @@
 // Fully scale-aware rendering (pxPerMs = scale).
 // OD ≤ 0 (including Half-Time edge cases) now correctly gives LARGER windows.
 
-function drawHitCircle(posX, colorIndex, isMissed = false, diameter = 20) {
+function drawHitCircle(posX, colorIndex, isMissed = false, diameter = 20, yOffset = 0) {
     if (posX < -100 || posX > canvas.width + 100) return;
     
     ctx.globalAlpha = isMissed ? 0.4 : 1.0;
@@ -10,7 +10,7 @@ function drawHitCircle(posX, colorIndex, isMissed = false, diameter = 20) {
     if (isMissed && hasHitCircleTexture && hitCircleImg) {
         const w = diameter;
         const h = diameter;
-        const dx = posX - w/2, dy = Y_CENTERED - h/2;
+        const dx = posX - w/2, dy = Y_CENTERED + yOffset - h/2;
         ctx.drawImage(hitCircleImg, dx, dy, w, h);
         if (hitCircleOverlayImg && hitCircleOverlayImg.complete) ctx.drawImage(hitCircleOverlayImg, dx, dy, w, h);
         ctx.globalAlpha = 1.0;
@@ -22,7 +22,7 @@ function drawHitCircle(posX, colorIndex, isMissed = false, diameter = 20) {
     if (hasHitCircleTexture && tintedCanvas) {
         const w = diameter;
         const h = diameter;
-        const dx = posX - w/2, dy = Y_CENTERED - h/2;
+        const dx = posX - w/2, dy = Y_CENTERED + yOffset - h/2;
         ctx.drawImage(tintedCanvas, dx, dy, w, h);
         if (hitCircleOverlayImg && hitCircleOverlayImg.complete) ctx.drawImage(hitCircleOverlayImg, dx, dy, w, h);
     } else {
@@ -33,7 +33,7 @@ function drawHitCircle(posX, colorIndex, isMissed = false, diameter = 20) {
             ctx.fillStyle = `rgb(${col.r},${col.g},${col.b})`;
         }
         ctx.beginPath(); 
-        ctx.arc(posX, Y_CENTERED, diameter / 2, 0, Math.PI*2); 
+        ctx.arc(posX, Y_CENTERED + yOffset, diameter / 2, 0, Math.PI*2); 
         ctx.fill();
     }
     ctx.globalAlpha = 1.0;
@@ -147,10 +147,16 @@ function draw() {
 
         const col = ((useBeatmapCombos && beatmapComboColors.length > 0) ? beatmapComboColors : DEFAULT_COMBO_COLORS)[note.comboColorIndex % (useBeatmapCombos && beatmapComboColors.length ? beatmapComboColors.length : 4)];
 
+        // ──────── LANE OFFSET (aligns with key-press lines) ────────
+        let yOffset = 0;
+        if (note.hitLane !== undefined && note.hitLane >= 0) {
+            yOffset = (note.hitLane === 0 ? -1 : 1) * (KEY_BOX_SPACING / 2);
+        }
+
         // Judgment meter bar
         if (note.type === 'circle' || note.type === 'slider') {
             const barHeight = 32;
-            const barY = Y_CENTERED - barHeight / 2;
+            const barY = Y_CENTERED + yOffset - barHeight / 2;
             const barX = xStart - (judgmentDiameterPx / 2);
             const barWidth = judgmentDiameterPx;
 
@@ -207,7 +213,7 @@ function draw() {
             sctx.beginPath(); sctx.moveTo(sP.x, sP.y); sctx.lineTo(eP.x, eP.y); sctx.stroke();
             
             sctx.globalAlpha = 1; sctx.globalCompositeOperation = 'source-over';
-            ctx.drawImage(sliderBuffer, 0, 0, sw, trackDiam * 2, xStart - trackDiam, Y_CENTERED - trackDiam, sw, trackDiam * 2);
+            ctx.drawImage(sliderBuffer, 0, 0, sw, trackDiam * 2, xStart - trackDiam, Y_CENTERED + yOffset - trackDiam, sw, trackDiam * 2);
 
             let currentBeatLength = 600;
             for (let tp of timingPoints) {
@@ -238,11 +244,11 @@ function draw() {
                         const tickScaleFactor = 0.65 * (judgmentDiameterPx / refWidth);
                         const tickW = tickCanvas.width * tickScaleFactor;
                         const tickH = tickCanvas.height * tickScaleFactor;
-                        ctx.drawImage(tickCanvas, tickX - tickW / 2, Y_CENTERED - tickH / 2, tickW, tickH);
+                        ctx.drawImage(tickCanvas, tickX - tickW / 2, Y_CENTERED + yOffset - tickH / 2, tickW, tickH);
                     } else {
                         ctx.fillStyle = note.isMissed ? `rgba(100,100,100,0.5)` : `rgb(${col.r},${col.g},${col.b})`;
                         ctx.beginPath();
-                        ctx.arc(tickX, Y_CENTERED, 5.5, 0, Math.PI * 2);
+                        ctx.arc(tickX, Y_CENTERED + yOffset, 5.5, 0, Math.PI * 2);
                         ctx.fill();
                     }
                     tickTime += tickDelta;
@@ -254,7 +260,7 @@ function draw() {
         }
 
         if (note.type === 'circle' || note.type === 'slider') {
-            drawHitCircle(xStart, note.comboColorIndex, note.isMissed, judgmentDiameterPx);
+            drawHitCircle(xStart, note.comboColorIndex, note.isMissed, judgmentDiameterPx, yOffset);
         }
         ctx.globalAlpha = 1;
     }
