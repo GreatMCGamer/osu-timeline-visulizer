@@ -1,13 +1,29 @@
 // ──────── CORE CONFIGURATION ────────
-// This section holds all constants, user settings, DOM elements, and global state variables.
-
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
+
+// NEW: This function handles the OBS browser source sizing automatically
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    
+    // Update dependent variables whenever size changes
+    playheadX = canvas.width * 0.75; 
+    Y_CENTERED = canvas.height / 2;
+}
 
 // ──────── USER CONFIG ────────
 const SPEED_MULTIPLIER = 1.0;
 let scale = 0.5;
-let playheadX = canvas.width * 0.75; // 3/4 of canvas width
+
+// These will be set by the resizeCanvas function below
+let playheadX; 
+let Y_CENTERED;
+
+// Initialize the size immediately
+resizeCanvas();
+// Update if the OBS source is dragged/resized
+window.addEventListener('resize', resizeCanvas);
 
 const COLORIZE_SLIDER_BODY = false; 
 let useBeatmapCombos = true;
@@ -21,10 +37,8 @@ const SHOW_JUDGMENT_BARS = false;
 // ──────── KEYPRESS VISUALIZATION CONFIG ────────
 const KEY_LINE_THICKNESS = 20;
 const KEY_BOX_SIZE = 24;
-const KEY_BOX_Y = 25;         // Y position of the first lane (k1/m1)
-const KEY_BOX_SPACING = 60;   // Vertical space between lane 1 and lane 2
-
-const Y_CENTERED = canvas.height / 2;
+const KEY_BOX_Y = 25;         
+const KEY_BOX_SPACING = 60;   
 
 const TITLE_FONT_SIZE = 50;
 
@@ -81,7 +95,6 @@ let defaultTintedSliderTicks = [];
 let beatmapTintedSliderTicks = [];
 let hasSliderTickTexture = false;
 
-// Flag to track if a new beatmap was detected (for texture loading optimization)
 let isNewBeatmap = false;
 
 const DEFAULT_COMBO_COLORS = [
