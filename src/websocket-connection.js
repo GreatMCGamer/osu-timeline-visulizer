@@ -34,25 +34,6 @@ function connect() {
                 }
                 lastCommonLiveTime = commonLiveTime;
                 lastCommonRealTime = now;
-                if (dtTosu !== 0) {
-                    lastLiveTimeChangeReal = now;
-                    if (currentSpeed === 0) {
-                        currentSpeed = 1.0;
-                        speedAccumTosu = 0; speedAccumReal = 0;
-                    }
-                    if (dtTosu > 0 && dtTosu < 500) {
-                        speedAccumTosu += dtTosu; speedAccumReal += dtReal;
-                        if (speedAccumReal > 500) {
-                            const raw = speedAccumTosu / speedAccumReal;
-                            currentSpeed = Math.abs(raw - 0.75) < 0.15 ? 0.75 : Math.abs(raw - 1.5) < 0.15 ? 1.5 : 1.0;
-                            speedAccumTosu = 0; speedAccumReal = 0;
-                        }
-                    } else if (dtTosu >= 500) {
-                        speedAccumTosu = 0; speedAccumReal = 0;
-                    }
-                } else if (now - lastLiveTimeChangeReal > 250 && currentSpeed !== 0) {
-                    currentSpeed = 0;
-                }
             }
         }
 

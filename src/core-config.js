@@ -13,7 +13,6 @@ function resizeCanvas() {
 }
 
 // ──────── USER CONFIG ────────
-const SPEED_MULTIPLIER = 1.0;
 let scale = 0.5;
 
 // These will be set by the resizeCanvas function below
@@ -71,14 +70,6 @@ let preciseWebSocketTime = 0;
 let lastCommonLiveTime = 0;
 let lastCommonRealTime = 0;
 let currentSpeed = 1.0;
-let lastLiveTimeChangeReal = performance.now();
-let speedAccumTosu = 0;
-let speedAccumReal = 0;
-
-let isTimelineLocked = false;
-let lockedBaseTime = 0;
-let lockedBaseRealTime = 0;
-let lockedCurrentSpeed = 1.0;
 
 let keyStrokes = [];
 let activeStrokes = { k1: null, k2: null, m1: null, m2: null };

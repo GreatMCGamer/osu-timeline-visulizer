@@ -293,7 +293,7 @@ function draw() {
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     
     // ──────── LIVE DEBUG: shows exactly what the code is calculating ────────
-    const debugInfo = `${(currentTime/1000).toFixed(2)}s | Speed: ${currentSpeed.toFixed(2)}x | OD: ${beatmapOD.toFixed(1)} | 50w: ${hitWindow50.toFixed(1)}ms | diam: ${judgmentDiameterPx.toFixed(0)}px | currentLiveTime: ${lastCommonLiveTime.toFixed(0)}ms | preciseWebSocketTime: ${preciseWebSocketTime.toFixed(0)}ms | ${isTimelineLocked ? 'LOCKED ✓' : 'syncing'}`;
+    const debugInfo = `${(currentTime/1000).toFixed(2)}s | Speed: ${currentSpeed.toFixed(2)}x | OD: ${beatmapOD.toFixed(1)} | 50w: ${hitWindow50.toFixed(1)}ms | diam: ${judgmentDiameterPx.toFixed(0)}px | currentLiveTime: ${lastCommonLiveTime.toFixed(0)}ms | preciseWebSocketTime: ${preciseWebSocketTime.toFixed(0)}ms`;
     ctx.fillText(debugInfo, 15, canvas.height - 10);
 
     if (SHOW_DEBUG_PANEL) {
