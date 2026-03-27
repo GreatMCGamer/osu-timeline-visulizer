@@ -31,7 +31,7 @@ const TEXTURE_SCALE = 0.4;
 const SPINNER_BAR_HEIGHT = 40;
 
 const TARGET_FPS = 480;
-const SHOW_DEBUG_PANEL = false;
+const SHOW_DEBUG_PANEL = true;
 const SHOW_JUDGMENT_BARS = false;
 
 // ──────── KEYPRESS VISUALIZATION CONFIG ────────
@@ -66,6 +66,7 @@ let lastReceiveTime = performance.now();
 let lastPreciseTime = 0;
 let lastPreciseRealTime = 0;
 let hitErrorCount = 0;
+let preciseWebSocketTime = 0;
 
 let lastCommonLiveTime = 0;
 let lastCommonRealTime = 0;

@@ -42,12 +42,11 @@ function drawHitCircle(posX, colorIndex, isMissed = false, diameter = 20, yOffse
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const now = performance.now();
-    if (now - lastReceiveTime > 1000) { currentSpeed = 0; isTimelineLocked = false; }
+    if (now - lastReceiveTime > 1000) { currentSpeed = 0;}
     if (gameStateName !== 'play' && gameStateName !== 'pause') { requestAnimationFrame(draw); return; }
 
-    let currentTime = isTimelineLocked 
-        ? lockedBaseTime + (now - lockedBaseRealTime) * lockedCurrentSpeed * SPEED_MULTIPLIER 
-        : lastCommonLiveTime || 0;
+    // The position of every object is now strictly tied to the last packet from wsPrecise.
+    let currentTime = lastPreciseTime || lastCommonLiveTime || 0;
 
     const pastMs = playheadX / scale + 200;
     const futureMs = (canvas.width - playheadX) / scale + 200;
@@ -294,7 +293,7 @@ function draw() {
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     
     // ──────── LIVE DEBUG: shows exactly what the code is calculating ────────
-    const debugInfo = `${(currentTime/1000).toFixed(2)}s | Speed: ${currentSpeed.toFixed(2)}x | OD: ${beatmapOD.toFixed(1)} | 50w: ${hitWindow50.toFixed(1)}ms | diam: ${judgmentDiameterPx.toFixed(0)}px | ${isTimelineLocked ? 'LOCKED ✓' : 'syncing'}`;
+    const debugInfo = `${(currentTime/1000).toFixed(2)}s | Speed: ${currentSpeed.toFixed(2)}x | OD: ${beatmapOD.toFixed(1)} | 50w: ${hitWindow50.toFixed(1)}ms | diam: ${judgmentDiameterPx.toFixed(0)}px | currentLiveTime: ${lastCommonLiveTime.toFixed(0)}ms | preciseWebSocketTime: ${preciseWebSocketTime.toFixed(0)}ms | ${isTimelineLocked ? 'LOCKED ✓' : 'syncing'}`;
     ctx.fillText(debugInfo, 15, canvas.height - 10);
 
     if (SHOW_DEBUG_PANEL) {
@@ -310,21 +309,8 @@ function draw() {
             ctx.fillText(`${key}: ${keyBoxStates[key] ? 'DOWN' : 'UP'}`, canvas.width - 290, y);
             y += 20;
         }
-        ctx.fillText(`Active Strokes:`, canvas.width - 290, y); y += 20;
-        for (const key in activeStrokes) {
-            const stroke = activeStrokes[key];
-            ctx.fillText(`${key}: ${stroke ? 'ACTIVE' : 'INACTIVE'}`, canvas.width - 290, y);
-            y += 20;
-        }
-        ctx.fillText(`Key Strokes Count: ${keyStrokes.length}`, canvas.width - 290, y); y += 20;
-        if (keyStrokes.length > 0) {
-            ctx.fillText(`Last Stroke:`, canvas.width - 290, y); y += 20;
-            const lastStroke = keyStrokes[keyStrokes.length - 1];
-            ctx.fillText(`  Key: ${lastStroke.key}`, canvas.width - 290, y); y += 20;
-            ctx.fillText(`  Start: ${lastStroke.startTime}`, canvas.width - 290, y); y += 20;
-            ctx.fillText(`  End: ${lastStroke.endTime !== null ? lastStroke.endTime : 'ACTIVE'}`, canvas.width - 290, y);
-        // debug panel unchanged
-        }
+        ctx.fillText(`currentLiveTime: ${lastCommonLiveTime.toFixed(0)}ms`, canvas.width - 290, y); y += 20;
+        ctx.fillText(`lastPreciseTime: ${lastPreciseTime.toFixed(0)}ms`, canvas.width - 290, y); y += 20;
     }
 
     requestAnimationFrame(draw);

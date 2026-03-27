@@ -23,21 +23,21 @@ function connect() {
                 if (data.settings.skin.colors.sliderTrackOverride) sliderTrackOverride = data.settings.skin.colors.sliderTrackOverride;
                 if (data.settings.skin.colors.sliderBorder) sliderBorder = data.settings.skin.colors.sliderBorder;
             }
-            const liveTime = data.beatmap.time?.live;
-            if (liveTime !== undefined) {
+            const commonLiveTime = data.beatmap.time?.live;
+            if (commonLiveTime !== undefined) {
                 lastReceiveTime = now;
                 let dtTosu = 0, dtReal = 0;
                 if (lastCommonLiveTime > 0) {
-                    dtTosu = liveTime - lastCommonLiveTime;
+                    dtTosu = commonLiveTime - lastCommonLiveTime;
                     dtReal = now - lastCommonRealTime;
                     if (dtTosu < -500) { resetTimelineState(); dtTosu = 0; }
                 }
-                lastCommonLiveTime = liveTime;
+                lastCommonLiveTime = commonLiveTime;
                 lastCommonRealTime = now;
                 if (dtTosu !== 0) {
                     lastLiveTimeChangeReal = now;
                     if (currentSpeed === 0) {
-                        currentSpeed = 1.0; isTimelineLocked = false;
+                        currentSpeed = 1.0;
                         speedAccumTosu = 0; speedAccumReal = 0;
                     }
                     if (dtTosu > 0 && dtTosu < 500) {
@@ -48,10 +48,10 @@ function connect() {
                             speedAccumTosu = 0; speedAccumReal = 0;
                         }
                     } else if (dtTosu >= 500) {
-                        isTimelineLocked = false; speedAccumTosu = 0; speedAccumReal = 0;
+                        speedAccumTosu = 0; speedAccumReal = 0;
                     }
                 } else if (now - lastLiveTimeChangeReal > 250 && currentSpeed !== 0) {
-                    currentSpeed = 0; isTimelineLocked = false;
+                    currentSpeed = 0;
                 }
             }
         }
@@ -78,28 +78,14 @@ function connect() {
     wsPrecise.onmessage = (e) => {
         const data = JSON.parse(e.data);
         const now = performance.now();
+        const preciseWebSocketTime = data.currentTime;
+        const liveTime = data.currentTime;
         const hitErrors = Array.isArray(data.hitErrors) ? data.hitErrors :
                           (Array.isArray(data.tourney) && data.tourney[0] && Array.isArray(data.tourney[0].hitErrors)) ? data.tourney[0].hitErrors : null;
 
         if (data.currentTime !== undefined) {
             lastPreciseTime = data.currentTime;
             lastPreciseRealTime = now;
-
-            // ──────── NEW: DESYNC / LAG DRIFT DETECTION ────────
-            // If the timeline is currently interpolating time independently, 
-            // check if it has drifted from the actual game client time.
-            if (isTimelineLocked) {
-                // Calculate what the drawing loop thinks the time is right now
-                let predictedTime = lockedBaseTime + (now - lockedBaseRealTime) * lockedCurrentSpeed * SPEED_MULTIPLIER;
-                
-                // If the difference is greater than 50ms, the game likely lagged
-                if (Math.abs(predictedTime - data.currentTime) > 50) {
-                    // Resync the system by snapping the lock directly to the true precise time
-                    lockedBaseTime = data.currentTime;
-                    lockedBaseRealTime = now;
-                    // We leave isTimelineLocked = true so it continues smoothly without waiting for a new hit error
-                }
-            }
         }
         
         if (data.keys) {
@@ -149,7 +135,7 @@ function connect() {
             if (hitErrors) {
             const newCount = hitErrors.length;
             if (newCount < hitErrorCount) {
-                hitErrorCount = newCount; isTimelineLocked = false;
+                hitErrorCount = newCount;
                 if (hitObjects) hitObjects.forEach(h => { h.judged = false; h.isMissed = false; });
             } else if (newCount > hitErrorCount) {
                 const hitsToProcess = newCount - hitErrorCount;
@@ -229,13 +215,6 @@ function connect() {
                         }
                     }
                     }
-
-                    if (!isTimelineLocked && snapTimeObj) {
-                        lockedBaseTime = snapTimeObj.startTime - hitErrors[newCount - 1];
-                        lockedBaseRealTime = now;
-                        lockedCurrentSpeed = currentSpeed === 0 ? 1.0 : currentSpeed;
-                        isTimelineLocked = true;
-                    }
                     hitErrorCount = newCount;
                 }
             }
@@ -244,10 +223,13 @@ function connect() {
     }
 }
 
-function resetTimelineState() {
-    isTimelineLocked = false; hitErrorCount = 0; lastCommonLiveTime = 0;
-    lastPreciseTime = 0; currentSpeed = 1.0; lockedBaseTime = 0;
-    lastLiveTimeChangeReal = performance.now(); speedAccumTosu = 0; speedAccumReal = 0;
+function resetTimelineState() { 
+    hitErrorCount = 0; 
+    lastCommonLiveTime = 0;
+    lastPreciseTime = 0; 
+    currentSpeed = 1.0;
+    ourDetectedMissCount = 0;
+    lastCombo = 0;
     
     keyStrokes = [];
     activeStrokes = { k1: null, k2: null, m1: null, m2: null };
@@ -256,10 +238,6 @@ function resetTimelineState() {
     if (hitObjects) hitObjects.forEach(h => { 
         h.judged = false; 
         h.isMissed = false;
-        h.hitLane = -1;   // ← NEW
+        h.hitLane = -1;
     });
-
-    lastCombo = 0;
-    ourDetectedMissCount = 0;
 }
-

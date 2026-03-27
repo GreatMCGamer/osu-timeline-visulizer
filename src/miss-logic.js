@@ -27,7 +27,6 @@ function processHitErrors(hitErrors) {
     const newCount = hitErrors.length;
     if (newCount < hitErrorCount) {
         hitErrorCount = newCount; 
-        isTimelineLocked = false;
         if (hitObjects) hitObjects.forEach(h => { h.judged = false; h.isMissed = false; });
     } else if (newCount > hitErrorCount) {
         const hitsToProcess = newCount - hitErrorCount;
@@ -106,13 +105,6 @@ function processHitErrors(hitErrors) {
                 }
             }
         }
-
-        if (!isTimelineLocked && snapTimeObj) {
-            lockedBaseTime = snapTimeObj.startTime - hitErrors[newCount - 1];
-            lockedBaseRealTime = performance.now();
-            lockedCurrentSpeed = currentSpeed === 0 ? 1.0 : currentSpeed;
-            isTimelineLocked = true;
-        }
         hitErrorCount = newCount;
     }
 }
@@ -162,26 +154,6 @@ function handleMissedKeyStrokes(currentTime, hitErrorLeeway) {
                 }
             } else {
                 stroke.matched = true;
-            }
-        }
-    }
-}
-
-// ──────── FIXED: SLIDER COMBO-BREAK DETECTION (long sliders now work) ────────
-// We no longer use a fixed 1000 ms start-time window.
-// Instead we take the most recent slider (current or previous) that is still
-// relevant at the moment the combo break packet arrives (within the normal
-// 100-200 ms poll delay).
-function markSliderAsMissed() {
-    const now = lastPreciseTime || lastCommonLiveTime || 0;
-    for (let i = hitObjects.length - 1; i >= 0; i--) {
-        const note = hitObjects[i];
-        if (note.type === 'slider' && !note.isMissed) {
-            // Slider is either still active or ended no more than 500 ms ago
-            // (covers the maximum expected combo-break packet delay)
-            if (note.endTime >= now - 500 && note.startTime <= now + 300) {
-                note.isMissed = true;
-                break;
             }
         }
     }
