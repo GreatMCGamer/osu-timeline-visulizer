@@ -94,16 +94,40 @@ function connect() {
                 const hasNewPress = (kCount > lastCounts[k]) || (isDown && !keyBoxStates[k]);
 
                 if (hasNewPress) {
-                    if (activeStrokes[k]) activeStrokes[k].endTime = currentLiveTime;
+                    const strokeStartTime = currentLiveTime;
                     
+                    // Create the stroke visually
                     const stroke = { 
                         key: k, 
-                        startTime: currentLiveTime, 
-                        endTime: isDown ? null : currentLiveTime + 1,
+                        startTime: strokeStartTime, 
+                        endTime: isDown ? null : strokeStartTime + 1,
                         matched: false
                     };
                     keyStrokes.push(stroke);
                     activeStrokes[k] = isDown ? stroke : null;
+
+                    // IMMEDIATE MATCHING: Check if this press generated a hit error
+                    if (hitErrors && hitErrors.length > hitErrorCount) {
+                        const latestError = hitErrors[hitErrors.length - 1]; // Use the most recent error
+                        
+                        // Find the note that perfectly fits this specific press
+                        let bestObj = hitObjects.find(obj => {
+                            if (obj.judged) return false;
+                            const trueHitTime = obj.startTime + latestError;
+                            return Math.abs(strokeStartTime - trueHitTime) <= 5; // 5ms precision check
+                        });
+
+                        if (bestObj) {
+                            bestObj.judged = true;
+                            bestObj.hitLane = (k === 'k1' || k === 'm1') ? 0 : 1; // Assign lane immediately
+                            stroke.matched = true;
+                            
+                            // Sync the visual stroke start to the game's true hit time
+                            stroke.startTime = bestObj.startTime + latestError;
+                            
+                            hitErrorCount = hitErrors.length; // Update processed count
+                        }
+                    }
                 } else if (!isDown && activeStrokes[k]) {
                     activeStrokes[k].endTime = currentLiveTime;
                     activeStrokes[k] = null;
@@ -113,92 +137,20 @@ function connect() {
                 keyBoxStates[k] = isDown;
             });
             
-            if (hitErrors) {
-            const newCount = hitErrors.length;
-            if (newCount < hitErrorCount) {
-                hitErrorCount = newCount;
-                if (hitObjects) hitObjects.forEach(h => { h.judged = false; h.isMissed = false; });
-            } else if (newCount > hitErrorCount) {
-                const hitsToProcess = newCount - hitErrorCount;
-                let snapTimeObj = null;
-
-                for (let i = 0; i < hitsToProcess; i++) {
-                    const error = hitErrors[hitErrorCount + i];
-                    
-                    let bestObj = null;
-                    let bestStroke = null;
-                    let minMismatch = Infinity;
-                    
-                    let unjudgedCandidates = hitObjects.filter(h => !h.judged).slice(0, 10);
-                    
-                    for (let obj of unjudgedCandidates) {
-                        for (let j = keyStrokes.length - 1; j >= 0; j--) {
-                            let stroke = keyStrokes[j];
-                            if (stroke.matched) continue;
-
-                            let calculatedError = stroke.startTime - obj.startTime;
-                            let diff = Math.abs(calculatedError - error);
-                            
-                            if (diff < minMismatch) {
-                                minMismatch = diff;
-                                bestObj = obj;
-                                bestStroke = stroke;
-                            }
-                        }
-                        
-                        let estimatedHitTime = lastPreciseTime - 20;
-                        let estimatedObjStartTime = estimatedHitTime - error;
-                        let timeDiff = Math.abs(obj.startTime - estimatedObjStartTime);
-                        
-                        if (timeDiff < minMismatch) {
-                            minMismatch = timeDiff;
-                            bestObj = obj;
-                            bestStroke = null;
-                        }
-                    }
-
-                    if (minMismatch > 150 && unjudgedCandidates.length > 0) {
-                        bestObj = unjudgedCandidates[0];
-                    }
-
-                    if (bestObj) {
-                        bestObj.judged = true;
-                        bestObj.isMissed = false;
-                        snapTimeObj = bestObj;
-
-                        // ──────── NEW: assign lane from the matching key stroke ────────
-                        if (bestStroke) {
-                            bestObj.hitLane = (bestStroke.key === 'k1' || bestStroke.key === 'm1') ? 0 : 1;
-                        }
-
-                        for (let obj of hitObjects) {
-                            if (obj === bestObj) break;
-                            if (!obj.judged) {
-                                obj.judged = true;
-                                if (!obj.isMissed) {
-                                    obj.isMissed = true;
-                                    ourDetectedMissCount++;
-                                }
-                                obj.hitLane = -1; // previous unjudged notes stay centered
-                            }
-                        }
-
-                        if (bestStroke) {
-                            bestStroke.matched = true;
-                            let wasMicrotap = bestStroke.endTime !== null && (bestStroke.endTime - bestStroke.startTime <= 2);
-                            const trueHitTime = bestObj.startTime + error;
-                            if (bestStroke.startTime !== null) bestStroke.startTime = trueHitTime;
-                            if (wasMicrotap && bestStroke.endTime !== null) {
-                                bestStroke.endTime = trueHitTime + 1;
-                            } else if (bestStroke.endTime !== null && bestStroke.endTime <= trueHitTime) {
-                                bestStroke.endTime = trueHitTime + 1; 
-                            }
-                        }
-                    }
-                    }
-                    hitErrorCount = newCount;
-                }
-            }
+// At the bottom of wsPrecise.onmessage, replacing that entire long block:
+if (hitErrors) {
+    const newCount = hitErrors.length;
+    if (newCount < hitErrorCount) {
+        // Handle map restarts/rewinds
+        hitErrorCount = newCount;
+        if (hitObjects) hitObjects.forEach(h => { h.judged = false; h.isMissed = false; h.hitLane = -1; });
+    } else {
+        // Just keep the counter in sync. 
+        // Hits are handled by the key-press trigger; 
+        // Misses are handled by the 'tooLateTime' check in drawing-functions.js.
+        hitErrorCount = newCount; 
+    }
+}
         };
         wsPrecise.onclose = () => setTimeout(connect, 2000);
     }
