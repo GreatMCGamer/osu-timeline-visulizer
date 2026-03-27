@@ -82,35 +82,6 @@ function draw() {
         }
     }
 
-    let firstUnjudgedIndex = hitObjects.findIndex(h => !h.judged);
-    for (let stroke of keyStrokes) {
-        if (!stroke.matched && currentTime > stroke.startTime + hitErrorLeeway) {
-            if (firstUnjudgedIndex !== -1) {
-                let nextNote = hitObjects[firstUnjudgedIndex];
-                let minHitTime = nextNote.startTime - hitWindow50;
-                let maxHitTime = nextNote.startTime + hitWindow50;
-                
-                if (stroke.startTime >= minHitTime && stroke.startTime <= maxHitTime) {
-                    nextNote.judged = true;
-                    if (!nextNote.isMissed) {
-                        nextNote.isMissed = true;
-                        ourDetectedMissCount++;
-                    }
-                    stroke.matched = true;
-                    
-                    while (firstUnjudgedIndex < hitObjects.length && hitObjects[firstUnjudgedIndex].judged) {
-                        firstUnjudgedIndex++;
-                    }
-                    if (firstUnjudgedIndex >= hitObjects.length) firstUnjudgedIndex = -1;
-                } else if (stroke.startTime < minHitTime) {
-                    stroke.matched = true;
-                }
-            } else {
-                stroke.matched = true;
-            }
-        }
-    }
-
     // Beat lines / timing grid
     if (timingPoints.length > 0) {
         let activeTP = timingPoints[0];
