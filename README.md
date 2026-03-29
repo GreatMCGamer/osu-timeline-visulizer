@@ -5,6 +5,9 @@ A real-time visualization of osu! beatmaps that displays hit objects, key presse
 Simply add index.html as Browser source on OBS.
 And Now when you start playing a map, the timeline will render.
 
+<img width="1921" height="1071" alt="image" src="https://github.com/user-attachments/assets/6b74ea5c-047a-4411-ad60-90ad9ffb0d93" />
+
+
 ## Features
 
 - Real-time beatmap visualization
