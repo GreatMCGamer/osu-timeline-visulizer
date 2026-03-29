@@ -11,10 +11,9 @@ function markSliderAsMissed() {
     for (let i = hitObjects.length - 1; i >= 0; i--) {
         const note = hitObjects[i];
         if (note.type === 'slider' && !note.isMissed) {
-            // Slider is either still active or ended no more than 500 ms ago
-            // (covers the maximum expected combo-break packet delay)
             if (note.endTime >= now - 500 && note.startTime <= now + 300) {
                 note.isMissed = true;
+                note.missedAt = now; // Record the exact time of the combo break
                 break;
             }
         }
@@ -82,6 +81,7 @@ function processHitErrors(hitErrors) {
                         obj.judged = true;
                         if (!obj.isMissed) {
                             obj.isMissed = true;
+                            obj.missedAt = lastPreciseTime || obj.startTime;
                             ourDetectedMissCount++;
                         }
                     }
@@ -119,6 +119,7 @@ function detectMissedObjects(currentTime, hitWindow50, tosuLeeway, hitErrorLeewa
                 note.judged = true;
                 if (!note.isMissed) {
                     note.isMissed = true;
+                    note.missedAt = tooLateTime; // Record the end of the hit window
                     ourDetectedMissCount++;
                 }
             }

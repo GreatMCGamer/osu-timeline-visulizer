@@ -2,13 +2,19 @@
  * Generates slider colors based strictly on passed-in skin/combo settings.
  */
 
-function getSliderTargetY(timestamp) {
+function getSliderTargetY(timestamp, hitTime) {
     let lane0 = false;
     let lane1 = false;
     
-    // Check keyStrokes for activity at this specific millisecond
+    // If the slider hasn't been hit yet, it stays centered
+    if (timestamp < hitTime) return Y_CENTERED;
+
     for (let i = 0; i < keyStrokes.length; i++) {
         const s = keyStrokes[i];
+        
+        // Filter: Only count keys that started AFTER the slider was hit
+        if (s.startTime < hitTime) continue; 
+        
         if (s.startTime > timestamp) continue;
         if (s.endTime !== null && s.endTime < timestamp) continue;
         
@@ -25,18 +31,26 @@ function getSliderTargetY(timestamp) {
 
 function getSnakyY(note, targetTime) {
     const laneDist = KEY_BOX_SPACING / 2;
-    const ySpeed = laneDist / 100; // Speed required to cross 1 lane in 100ms
-    const step = 4; // Calculation resolution
-    
-    // Start at the lane of the initial hit
-    let currentY = Y_CENTERED;
-    const startTarget = getSliderTargetY(note.startTime);
-    currentY = startTarget;
+    const ySpeed = laneDist / 100; 
+    const step = 4; 
+    const hitTime = note.startTime; 
 
-    // Simulate the "Follow" logic from start to targetTime
-    for (let t = note.startTime; t <= targetTime; t += step) {
-        const targetY = getSliderTargetY(t);
+    // ──────── REFINED SNAKY LOGIC ────────
+    // calculationTime determines how far into the simulation we go.
+    // If targetTime is after the miss, we only simulate up to the missTime.
+    let calculationTime = targetTime;
+    if (note.isMissed) {
+        const missTime = note.missedAt || note.startTime;
+        calculationTime = Math.min(targetTime, missTime);
+    }
+
+    let currentY = Y_CENTERED;
+
+    // Simulate movement only up to the calculationTime (either target or miss)
+    for (let t = note.startTime; t <= calculationTime; t += step) {
+        const targetY = getSliderTargetY(t, hitTime); 
         const dy = targetY - currentY;
+        
         if (Math.abs(dy) > 0.1) {
             const move = ySpeed * step;
             if (Math.abs(dy) <= move) currentY = targetY;
