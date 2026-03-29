@@ -123,22 +123,26 @@ function connect() {
                     // IMMEDIATE MATCHING: Check if this press generated a hit error
                     if (hitErrors && hitErrors.length > hitErrorCount) {
                         const latestError = hitErrors[hitErrors.length - 1]; // Use the most recent error
-                        
+
                         // Find the note that perfectly fits this specific press
                         let bestObj = hitObjects.find(obj => {
                             if (obj.judged) return false;
                             const trueHitTime = obj.startTime + latestError;
                             return Math.abs(strokeStartTime - trueHitTime) <= 5; // 5ms precision check
                         });
-
+                    
                         if (bestObj) {
                             bestObj.judged = true;
                             bestObj.hitLane = (k === 'k1' || k === 'm1') ? 0 : 1; // Assign lane immediately
+
+                            // === NEW: store the REAL judgment time ===
+                            bestObj.actualHitTime = bestObj.startTime + latestError;
+
                             stroke.matched = true;
-                            
+
                             // Sync the visual stroke start to the game's true hit time
                             stroke.startTime = bestObj.startTime + latestError;
-                            
+
                             hitErrorCount = hitErrors.length; // Update processed count
                         }
                     }
@@ -186,5 +190,6 @@ function resetTimelineState() {
         h.judged = false; 
         h.isMissed = false;
         h.hitLane = -1;
+        h.actualHitTime = undefined;
     });
 }

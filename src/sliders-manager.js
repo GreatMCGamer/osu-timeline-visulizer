@@ -3,6 +3,9 @@
  */
 
 function getSliderTargetY(timestamp, hitTime) {
+    // hitTime is now the *actual* judgment time (note.actualHitTime) once judged,
+    // or the nominal startTime for unjudged sliders.
+    // Only keys that started AFTER the slider was actually hit are counted.
     let lane0 = false;
     let lane1 = false;
     
@@ -33,11 +36,25 @@ function getSnakyY(note, targetTime) {
     const laneDist = KEY_BOX_SPACING / 2;
     const ySpeed = laneDist / 100; 
     const step = 4; 
-    const hitTime = note.startTime; 
+
+    // Use the real judgment time once the slider has been hit
+    const hitTime = (note.judged && typeof note.actualHitTime !== 'undefined')
+        ? note.actualHitTime
+        : note.startTime;
+
+    // ──────── NEW: Head (and pre-hit body) now snaps to hitLane ────────
+    // This makes the slider head behave exactly like a circle's hit circle.
+    // The body remains fully snaky after the actual hit time.
+    const isJudged = note.judged && !note.isMissed;
+    let hitLaneY = Y_CENTERED;
+    if (isJudged && typeof note.hitLane !== 'undefined' && note.hitLane !== -1) {
+        hitLaneY = note.hitLane === 0 
+            ? Y_CENTERED - laneDist 
+            : Y_CENTERED + laneDist;
+    }
 
     // ──────── REFINED SNAKY LOGIC ────────
     // calculationTime determines how far into the simulation we go.
-    // If targetTime is after the miss, we only simulate up to the missTime.
     let calculationTime = targetTime;
     if (note.isMissed) {
         const missTime = note.missedAt || note.startTime;
@@ -45,10 +62,21 @@ function getSnakyY(note, targetTime) {
     }
 
     let currentY = Y_CENTERED;
+    if (isJudged) {
+        currentY = hitLaneY;   // start simulation from the hit lane
+    }
 
-    // Simulate movement only up to the calculationTime (either target or miss)
+    // Simulate movement only up to the calculationTime
     for (let t = note.startTime; t <= calculationTime; t += step) {
-        const targetY = getSliderTargetY(t, hitTime); 
+        let targetY = getSliderTargetY(t, hitTime); 
+
+        // Force the head + any body points BEFORE the actual hit time
+        // to stay at the hit lane (retroactive snap for late hits).
+        // This eliminates any visual discontinuity between head and path start.
+        if (isJudged && t <= hitTime) {
+            targetY = hitLaneY;
+        }
+
         const dy = targetY - currentY;
         
         if (Math.abs(dy) > 0.1) {
