@@ -59,6 +59,17 @@ function drawFallbackCircle(posX, colorIndex, isMissed, diameter, yOffset) {
     ctx.fill();
 }
 
+function getHitCircleY(note) {
+    // If it's unjudged, missed, or has no lane assigned, keep it in the center
+    if (!note.judged || note.isMissed || note.hitLane === undefined || note.hitLane === -1) {
+        return Y_CENTERED;
+    }
+
+    // Move to the exact lane it was hit in
+    const laneDist = KEY_BOX_SPACING / 2;
+    return note.hitLane === 0 ? Y_CENTERED - laneDist : Y_CENTERED + laneDist;
+}
+
 function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiameterPx) {
     const col = ((useBeatmapCombos && beatmapComboColors.length > 0) 
         ? beatmapComboColors 
@@ -334,10 +345,13 @@ if (note.type === 'slider') {
             ctx.fillRect(xStart, Y_CENTERED - SPINNER_BAR_HEIGHT/2, xEnd - xStart, SPINNER_BAR_HEIGHT);
         }
 
-        if (note.type === 'circle' || note.type === 'slider') {
-            // Use snaky Y position for hit circles
-            const circleY = getSnakyY(note, note.startTime);
-            drawHitCircle(xStart, note.comboColorIndex, note.isMissed, judgmentDiameterPx, circleY - Y_CENTERED);
+            if (note.type === 'circle' || note.type === 'slider') {
+            // Sliders snake, Circles snap to their hit lane
+            const yPos = note.type === 'slider' 
+                ? getSnakyY(note, note.startTime) 
+                : getHitCircleY(note);
+                
+            drawHitCircle(xStart, note.comboColorIndex, note.isMissed, judgmentDiameterPx, yPos - Y_CENTERED);
         }
         ctx.globalAlpha = 1;
     }
