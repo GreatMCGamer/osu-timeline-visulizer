@@ -5,6 +5,15 @@ A real-time visualization of osu! beatmaps that displays hit objects, key presse
 Simply add index.html as Browser source on OBS.
 And Now when you start playing a map, the timeline will render.
 
+## Features
+
+- Real-time beatmap visualization
+- Hit circle, slider, and spinner object rendering
+- Key press lane visualization
+- Miss detection and timing feedback
+- Dynamic font sizing for beatmap titles
+- Responsive design that works with OBS
+
 ## Project Structure
 
 The monolithic JavaScript file has been broken down into multiple modular files to improve maintainability and organization:
@@ -38,6 +47,7 @@ This file contains all constants, user settings, DOM elements, and global state 
 - Global state variables for game state, timing, and key presses
 - Texture loading configuration
 - Default combo colors and timing-related constants
+- Automatic OBS browser source sizing handling
 
 ### 2. `websocket-connection.js`
 **Purpose**: WebSocket connection management and real-time data handling
@@ -50,6 +60,8 @@ This file handles all WebSocket connections to tosu/gosumemory and processes rea
 - Processes hit errors to determine when objects are missed
 - Implements timeline locking and speed adjustment logic
 - Contains functions for resetting timeline state and marking sliders as missed
+- NEW: Handles skin color loading from skin.ini
+- NEW: Implements precise key press matching with hit error data
 
 ### 3. `beatmap-parser.js`
 **Purpose**: Beatmap file parsing and processing
@@ -61,6 +73,8 @@ This file is responsible for fetching and parsing .osu beatmap files:
 - Calculates slider durations based on timing points and slider multipliers
 - Sorts hit objects by start time for proper rendering order
 - Extracts difficulty settings (Overall Difficulty, Slider Tick Rate)
+- NEW: Handles beatmap file caching to prevent timeline freezing
+- NEW: Preserves OD = 0 and OD < 0 values correctly
 
 ### 4. `texture-manager.js`
 **Purpose**: Texture loading and color tinting
@@ -71,6 +85,9 @@ This file handles loading skin textures and creating color variations:
 - Creates color-tinted variations of textures for different combo colors
 - Handles fallback logic when textures are missing or fail to load
 - Provides functions for tinting images with specific colors
+- NEW: Combines hitcircle and hitcircleoverlay into a single pre-combined image
+- NEW: Loads skin colors from skin.ini for accurate combo color matching
+- NEW: Implements flexible key:value parser for skin.ini
 
 ### 5. `sliders-manager.js`
 **Purpose**: Slider body drawing and styling
@@ -80,6 +97,8 @@ This file contains the mathematical and canvas buffer operations required to dra
 - Handles miss styling for sliders (dimmed colors and reduced opacity)
 - Provides functions for creating visual effects like highlights and gradients
 - Manages slider body rendering with proper styling based on combo colors
+- NEW: Implements snaky slider movement logic based on key presses
+- NEW: Calculates slider target Y position based on key press timing
 
 ### 6. `drawing-functions.js`
 **Purpose**: Primary visual rendering and drawing logic
@@ -93,6 +112,9 @@ This is the main drawing module that handles all visual rendering:
 - Displays map title with dynamic font sizing
 - Manages debug panel functionality
 - Contains the main drawing loop that updates the visualization
+- NEW: Uses pre-combined hitcircle + overlay image for better performance
+- NEW: Implements snaky slider movement logic based on key presses
+- NEW: Improved miss detection with timing-based logic
 
 ### 7. `key-visualization.js`
 **Purpose**: Key press lane visualization
@@ -114,6 +136,8 @@ This file contains all miss detection and timing-related logic:
 - Manages key stroke miss handling and object marking
 - Contains functions for detecting when objects are missed due to timing
 - Implements the logic for updating timeline locking based on hit errors
+- NEW: Improved slider combo-break detection with better timing accuracy
+- NEW: Enhanced hit error processing with better object matching
 
 ### 9. `text-manager.js`
 **Purpose**: Text rendering and title display
@@ -144,6 +168,13 @@ This file serves as the main application entry point that ties all components to
 6. Miss detection logic determines when objects are missed
 7. All visual elements are rendered on the canvas in real-time
 
+## Installation
+
+1. Clone or download this repository
+2. Run tosu/gosumemory locally on port 24050
+3. Open index.html in a browser
+4. Add index.html as a Browser source in OBS
+
 ## Usage
 
 To use this visualization:
@@ -151,6 +182,14 @@ To use this visualization:
 2. Open index.html in a browser
 3. Select an osu! map to visualize
 4. The visualization will automatically start showing the beatmap timeline
+
+## Contributing
+
+Contributions are welcome! Please follow these steps:
+1. Fork the repository
+2. Create a new branch for your feature
+3. Make your changes
+4. Submit a pull request with a clear description of your changes
 
 ## Dependencies
 
