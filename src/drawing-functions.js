@@ -14,9 +14,7 @@ function drawHitCircle(posX, colorIndex, isMissed = false, diameter = 20, yOffse
         if (isMissed) {
             toDraw = hitCircleCombinedImg;                    // non-tinted + overlay
         } else {
-            const activeTinted = (useBeatmapCombos && beatmapTintedHitCircles.length > 0) 
-                ? beatmapTintedHitCircles 
-                : defaultTintedHitCircles;
+            const activeTinted = tintedHitCircles; // now the single array
             toDraw = activeTinted[colorIndex % activeTinted.length];
         }
 
@@ -30,18 +28,18 @@ function drawHitCircle(posX, colorIndex, isMissed = false, diameter = 20, yOffse
             // Extremely rare fallback (should never hit if hasHitCircleTexture is true)
             drawFallbackCircle(posX, colorIndex, isMissed, diameter, yOffset);
         }
-    } else {
-        // Original procedural fallback when no texture is loaded
-        if (isMissed) {
-            ctx.fillStyle = `rgba(100, 100, 100, 0.5)`;
         } else {
-            const col = (useBeatmapCombos && beatmapComboColors.length ? beatmapComboColors : DEFAULT_COMBO_COLORS)[colorIndex % 4];
-            ctx.fillStyle = `rgb(${col.r},${col.g},${col.b})`;
-        }
-        ctx.beginPath(); 
-        ctx.arc(posX, Y_CENTERED + yOffset, diameter / 2, 0, Math.PI*2); 
-        ctx.fill();
-    }
+                // Original procedural fallback when no texture is loaded
+                if (isMissed) {
+                    ctx.fillStyle = `rgba(100, 100, 100, 0.5)`;
+                } else {
+                    const col = comboColors[colorIndex % comboColors.length];
+                    ctx.fillStyle = `rgb(${col.r},${col.g},${col.b})`;
+                }
+                ctx.beginPath(); 
+                ctx.arc(posX, Y_CENTERED + yOffset, diameter / 2, 0, Math.PI*2); 
+                ctx.fill();
+            }
 
     ctx.globalAlpha = 1.0;
 }
@@ -51,7 +49,7 @@ function drawFallbackCircle(posX, colorIndex, isMissed, diameter, yOffset) {
     if (isMissed) {
         ctx.fillStyle = `rgba(100, 100, 100, 0.5)`;
     } else {
-        const col = (useBeatmapCombos && beatmapComboColors.length ? beatmapComboColors : DEFAULT_COMBO_COLORS)[colorIndex % 4];
+        const col = comboColors[colorIndex % comboColors.length];
         ctx.fillStyle = `rgb(${col.r},${col.g},${col.b})`;
     }
     ctx.beginPath(); 
@@ -71,9 +69,7 @@ function getHitCircleY(note) {
 }
 
 function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiameterPx) {
-    const col = ((useBeatmapCombos && beatmapComboColors.length > 0) 
-        ? beatmapComboColors 
-        : DEFAULT_COMBO_COLORS)[note.comboColorIndex % (useBeatmapCombos && beatmapComboColors.length ? beatmapComboColors.length : 4)];
+    const col = comboColors[note.comboColorIndex % comboColors.length];
     
     const trackColor = (typeof sliderTrackOverride !== 'undefined' && sliderTrackOverride) 
         ? sliderTrackOverride 
@@ -121,9 +117,7 @@ function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiam
     sCtx.stroke(path);
 
     // 2. BODY: Texture OR layered gradient fallback
-    const activeTinted = (useBeatmapCombos && beatmapTintedSliderBodies && beatmapTintedSliderBodies.length > 0)
-        ? beatmapTintedSliderBodies
-        : defaultTintedSliderBodies;
+    const activeTinted = tintedSliderBodies;
 
     const tintedBodyCanvas = activeTinted 
         ? activeTinted[note.comboColorIndex % activeTinted.length] 
@@ -256,7 +250,7 @@ function draw() {
         let alpha = xEnd < 100 ? Math.max(0, xEnd / 100) : 1;
         ctx.globalAlpha = Math.max(0.1, alpha);
 
-        const col = ((useBeatmapCombos && beatmapComboColors.length > 0) ? beatmapComboColors : DEFAULT_COMBO_COLORS)[note.comboColorIndex % (useBeatmapCombos && beatmapComboColors.length ? beatmapComboColors.length : 4)];
+        const col = comboColors[note.comboColorIndex % comboColors.length];
 
         // Judgment meter bar
         if ((note.type === 'circle' || note.type === 'slider') && SHOW_JUDGMENT_BARS) {
@@ -321,8 +315,7 @@ if (note.type === 'slider') {
                     if (note.isMissed && hasSliderTickTexture) {
                         tickCanvas = sliderTickImg;
                     } else if (hasSliderTickTexture) {
-                        const activeTinted = (useBeatmapCombos && beatmapTintedSliderTicks.length > 0) ? beatmapTintedSliderTicks : defaultTintedSliderTicks;
-                        tickCanvas = activeTinted[note.comboColorIndex % activeTinted.length];
+                    tickCanvas = tintedSliderTicks[note.comboColorIndex % tintedSliderTicks.length];
                     }
 
                     if (tickCanvas) {

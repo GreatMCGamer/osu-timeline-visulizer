@@ -28,6 +28,117 @@ function combineWithOverlay(base, overlayImg) {
     return combined;
 }
 
+// ──────── NEW HELPER: Central combo color selector ────────
+// This function loads either default, beatmap, or skin colors into the single "comboColors" array
+// (exactly as you described). Called automatically before tinting and drawing.
+function updateComboColors() {
+    comboColors.length = 0; // safe clear
+    
+    if (ComboColorSource === 0) {
+        // Default colors
+        comboColors.push(...DEFAULT_COMBO_COLORS);
+    } else if (ComboColorSource === 1) {
+        // Beatmap colors (fallback to default if none)
+        if (typeof beatmapComboColors !== 'undefined' && beatmapComboColors.length > 0) {
+            comboColors.push(...beatmapComboColors);
+        } else {
+            comboColors.push(...DEFAULT_COMBO_COLORS);
+        }
+    } else if (ComboColorSource === 2) {
+        // Skin colors (fallback to default if none)
+        if (typeof skinComboColors !== 'undefined' && skinComboColors.length > 0) {
+            comboColors.push(...skinComboColors);
+        } else {
+            comboColors.push(...DEFAULT_COMBO_COLORS);
+        }
+    }
+    
+    // Safety: always have at least the 4 default colors
+    if (comboColors.length === 0) {
+        comboColors.push(...DEFAULT_COMBO_COLORS);
+    }
+}
+
+// ──────── NEW: Load skin colors by parsing skin.ini (tosu does NOT send colors in JSON) ────────
+// This is the correct way to get Combo1/Combo2/... and also SliderBorder/SliderTrackOverride.
+async function loadSkinIniColors() {
+    const cacheBustStr = `?v=${Date.now()}`;
+    const tosuUrl = 'http://127.0.0.1:24050/files/skin/';
+
+    try {
+        const response = await fetch(tosuUrl + 'skin.ini' + cacheBustStr);
+        if (!response.ok) throw new Error('skin.ini not found or not accessible');
+
+        const text = await response.text();
+        const lines = text.split(/\r?\n/);
+
+        let inColoursSection = false;
+        const newSkinComboColors = [];
+
+        for (let line of lines) {
+            line = line.trim();
+            if (!line || line.startsWith('//') || line.startsWith(';')) continue;
+
+            if (line === '[Colours]') {
+                inColoursSection = true;
+                continue;
+            }
+            if (inColoursSection && line.startsWith('[')) {
+                inColoursSection = false; // end of section
+                continue;
+            }
+            if (!inColoursSection) continue;
+
+            // ──────── FLEXIBLE KEY:VALUE PARSER (handles both : and =) ────────
+            const separatorMatch = line.match(/^([^:=\s]+)\s*[:=]\s*(.+)$/);
+            if (!separatorMatch) continue;
+
+            const key = separatorMatch[1].trim();
+            const value = separatorMatch[2].trim();
+
+            // Parse Combo1 through Combo8 (in the exact order they appear)
+            if (key.match(/^Combo[1-8]$/)) {
+                const rgb = value.split(',').map(n => parseInt(n.trim(), 10));
+                if (rgb.length >= 3 && !isNaN(rgb[0]) && !isNaN(rgb[1]) && !isNaN(rgb[2])) {
+                    newSkinComboColors.push({ r: rgb[0], g: rgb[1], b: rgb[2] });
+                }
+            }
+
+            // Also parse slider colors (works with both : and =)
+            if (key === 'SliderBorder') {
+                const rgb = value.split(',').map(n => parseInt(n.trim(), 10));
+                if (rgb.length >= 3 && !isNaN(rgb[0])) sliderBorder = [rgb[0], rgb[1], rgb[2]];
+            }
+            if (key === 'SliderTrackOverride') {
+                const rgb = value.split(',').map(n => parseInt(n.trim(), 10));
+                if (rgb.length >= 3 && !isNaN(rgb[0])) sliderTrackOverride = [rgb[0], rgb[1], rgb[2]];
+            }
+        }
+
+        // Update the global array used by ComboColorSource = 2
+        skinComboColors = newSkinComboColors.length > 0 
+            ? newSkinComboColors 
+            : [...DEFAULT_COMBO_COLORS];
+
+        updateComboColors();
+
+        // If textures are already loaded, immediately re-tint everything with the new skin colors
+        if (typeof hasHitCircleTexture !== 'undefined' && hasHitCircleTexture) {
+            createTintedVersions();
+        }
+
+        console.log(`[Texture Manager] Loaded ${newSkinComboColors.length} skin combo colors from skin.ini`);
+
+    } catch (err) {
+        console.warn('[Texture Manager] Could not load skin.ini colors (using defaults instead):', err);
+        skinComboColors = [...DEFAULT_COMBO_COLORS];
+        updateComboColors();
+        if (typeof hasHitCircleTexture !== 'undefined' && hasHitCircleTexture) {
+            createTintedVersions();
+        }
+    }
+}
+
 function loadTextures() {
     const cacheBustStr = (isNewBeatmap || isNewSkin) ? `?v=${Date.now()}` : '';
 
@@ -47,14 +158,11 @@ function loadTextures() {
         hitCircleOverlayImg = null;
         sliderTickImg = null;
         sliderBodyImg = null;
-        hitCircleCombinedImg = null;          // ← combined image for hitcircles
+        hitCircleCombinedImg = null;
         
-        defaultTintedHitCircles.length = 0;
-        beatmapTintedHitCircles.length = 0;
-        defaultTintedSliderTicks.length = 0;
-        beatmapTintedSliderTicks.length = 0;
-        defaultTintedSliderBodies.length = 0;
-        beatmapTintedSliderBodies.length = 0;
+        tintedHitCircles.length = 0;
+        tintedSliderTicks.length = 0;
+        tintedSliderBodies.length = 0;
 
         isNewSkin = false;
         isNewBeatmap = false;
@@ -128,49 +236,28 @@ function loadTextures() {
 }
 
 function createTintedVersions() {
-    if (hitCircleImg && hitCircleImg.complete && hitCircleImg.naturalWidth > 0) {
-        const defaultColors = typeof DEFAULT_COMBO_COLORS !== 'undefined' ? DEFAULT_COMBO_COLORS : [{r:255,g:192,b:0}, {r:0,g:202,b:0}, {r:18,g:124,b:255}, {r:242,g:24,b:57}];
-        
-        // 7. DO NOT USE .MAP(). Clear and push to the existing arrays.
-        defaultTintedHitCircles.length = 0;
-        defaultColors.forEach(c => {
-            const tintedBase = tintImage(hitCircleImg, `rgb(${c.r},${c.g},${c.b})`);
-            defaultTintedHitCircles.push(combineWithOverlay(tintedBase, hitCircleOverlayImg));
-        });
-        
-        if (typeof beatmapComboColors !== 'undefined' && beatmapComboColors.length) {
-            beatmapTintedHitCircles.length = 0;
-            beatmapComboColors.forEach(c => {
-                const tintedBase = tintImage(hitCircleImg, `rgb(${c.r},${c.g},${c.b})`);
-                beatmapTintedHitCircles.push(combineWithOverlay(tintedBase, hitCircleOverlayImg));
-            });
-        }
+    updateComboColors(); // ← always use the latest selected colors
 
+    // Hitcircles (tinted + overlay pre-combined)
+    if (hitCircleImg && hitCircleImg.complete && hitCircleImg.naturalWidth > 0) {
+        tintedHitCircles.length = 0;
+        comboColors.forEach(c => {
+            const tintedBase = tintImage(hitCircleImg, `rgb(${c.r},${c.g},${c.b})`);
+            tintedHitCircles.push(combineWithOverlay(tintedBase, hitCircleOverlayImg));
+        });
         hitCircleCombinedImg = combineWithOverlay(hitCircleImg, hitCircleOverlayImg);
     }
-    
+
+    // Slider ticks
     if (sliderTickImg && sliderTickImg.complete && sliderTickImg.naturalWidth > 0) {
-        const defaultColors = typeof DEFAULT_COMBO_COLORS !== 'undefined' ? DEFAULT_COMBO_COLORS : [{r:255,g:192,b:0}, {r:0,g:202,b:0}, {r:18,g:124,b:255}, {r:242,g:24,b:57}];
-        
-        defaultTintedSliderTicks.length = 0;
-        defaultColors.forEach(c => defaultTintedSliderTicks.push(tintImage(sliderTickImg, `rgb(${c.r},${c.g},${c.b})`)));
-        
-        if (typeof beatmapComboColors !== 'undefined' && beatmapComboColors.length) {
-            beatmapTintedSliderTicks.length = 0;
-            beatmapComboColors.forEach(c => beatmapTintedSliderTicks.push(tintImage(sliderTickImg, `rgb(${c.r},${c.g},${c.b})`)));
-        }
+        tintedSliderTicks.length = 0;
+        comboColors.forEach(c => tintedSliderTicks.push(tintImage(sliderTickImg, `rgb(${c.r},${c.g},${c.b})`)));
     }
 
+    // Slider bodies
     if (sliderBodyImg && sliderBodyImg.complete && sliderBodyImg.naturalWidth > 0) {
-        const defaultColors = typeof DEFAULT_COMBO_COLORS !== 'undefined' ? DEFAULT_COMBO_COLORS : [{r:255,g:192,b:0}, {r:0,g:202,b:0}, {r:18,g:124,b:255}, {r:242,g:24,b:57}];
-        
-        defaultTintedSliderBodies.length = 0;
-        defaultColors.forEach(c => defaultTintedSliderBodies.push(tintImage(sliderBodyImg, `rgb(${c.r},${c.g},${c.b})`)));
-        
-        if (typeof beatmapComboColors !== 'undefined' && beatmapComboColors.length) {
-            beatmapTintedSliderBodies.length = 0;
-            beatmapComboColors.forEach(c => beatmapTintedSliderBodies.push(tintImage(sliderBodyImg, `rgb(${c.r},${c.g},${c.b})`)));
-        }
+        tintedSliderBodies.length = 0;
+        comboColors.forEach(c => tintedSliderBodies.push(tintImage(sliderBodyImg, `rgb(${c.r},${c.g},${c.b})`)));
     }
 }
 

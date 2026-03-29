@@ -14,7 +14,11 @@ function connect() {
             if (data.folders.skin !== lastSkinFolder) {
                 isNewSkin = true;
                 lastSkinFolder = data.folders.skin;
-                // Trigger the reload and tell it to force a reset
+                
+                // NEW: Load real skin colors from skin.ini (tosu only gives us the file path + files, not colors in JSON)
+                loadSkinIniColors();   // async, runs in parallel with texture loading
+                
+                // Trigger texture reload (existing behaviour)
                 loadTextures(); 
             }
         }
@@ -28,10 +32,11 @@ function connect() {
                 resetTimelineState();
                 fetchBeatmap(data.beatmap);
             }
-            if (data.settings?.skin?.colors) {
-                if (data.settings.skin.colors.sliderTrackOverride) sliderTrackOverride = data.settings.skin.colors.sliderTrackOverride;
-                if (data.settings.skin.colors.sliderBorder) sliderBorder = data.settings.skin.colors.sliderBorder;
+            updateComboColors();
+            if (typeof hasHitCircleTexture !== 'undefined' && hasHitCircleTexture) {
+                createTintedVersions();
             }
+            
             const commonLiveTime = data.beatmap.time?.live;
             if (commonLiveTime !== undefined) {
                 lastReceiveTime = now;

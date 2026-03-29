@@ -24,8 +24,13 @@ resizeCanvas();
 // Update if the OBS source is dragged/resized
 window.addEventListener('resize', resizeCanvas);
 
-const COLORIZE_SLIDER_BODY = false; 
-let useBeatmapCombos = true;
+// 0 = default (hardcoded osu! colors)
+// 1 = beatmap colors (from .osu file)
+// 2 = skin colors (from skin.ini via tosu)
+// We default to 1 so existing behavior stays the same until you change it.
+let ComboColorSource = 2;
+
+const COLORIZE_SLIDER_BODY = false;
 const TEXTURE_SCALE = 0.4;
 const SPINNER_BAR_HEIGHT = 40;
 
@@ -75,8 +80,6 @@ let keyBoxStates = { k1: false, k2: false, m1: false, m2: false };
 
 let hitCircleImg = null;
 let hitCircleOverlayImg = null;
-let defaultTintedHitCircles = [];
-let beatmapTintedHitCircles = [];
 let hasHitCircleTexture = false;
 let hasHitCircleOverlayImg = false;
 let hitCircleCombinedImg = null;
@@ -85,12 +88,14 @@ let isLoadingTextures = false;
 let hasSliderTickTexture = false;
 let hasSliderBodyTexture = false;
 let sliderBodyImg = null;
-let defaultTintedSliderBodies = [];
-let beatmapTintedSliderBodies = [];
 let sliderTickImg = null;
-let defaultTintedSliderTicks = [];
-let beatmapTintedSliderTicks = [];
 let lastSkinFolder = '';
+
+let skinComboColors = [];
+let comboColors = [];
+let tintedHitCircles = [];
+let tintedSliderTicks = [];
+let tintedSliderBodies = [];
 
 const sliderBuffer = document.createElement('canvas');
 const sctx = sliderBuffer.getContext('2d');
