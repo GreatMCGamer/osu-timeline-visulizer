@@ -2,14 +2,17 @@
  * Generates slider colors based strictly on passed-in skin/combo settings.
  */
 
-function getSliderTargetY(timestamp, hitTime) {
-    // hitTime is the actual judgment time (note.actualHitTime) once judged,
-    // or the nominal startTime for unjudged sliders.
-    let lane0 = false;
-    let lane1 = false;
-    
+function getSliderTargetY(timestamp, hitTime, currentTime) {
+    // If timestamp is ahead of current playback time (to the right of the judgment line), keep it centered
+    if (typeof currentTime === 'number' && timestamp > currentTime) {
+        return Y_CENTERED;
+    }
+
     // If the slider hasn't been hit yet, it stays centered
     if (timestamp < hitTime) return Y_CENTERED;
+
+    let lane0 = false;
+    let lane1 = false;
 
     for (let i = 0; i < keyStrokes.length; i++) {
         const s = keyStrokes[i];
@@ -32,7 +35,19 @@ function getSliderTargetY(timestamp, hitTime) {
     return Y_CENTERED;
 }
 
-function getSnakyY(note, targetTime) {
+function getSnakyY(note, targetTime, currentTime) {
+    // ──────── CRITICAL: BEFORE THE JUDGMENT LINE ────────
+    // Points at targetTime > currentTime are in the future (approaching / to the right of the judgment line).
+    // They MUST stay centered at Y_CENTERED and never snake or wiggle from active key presses.
+    if (typeof currentTime === 'number' && targetTime > currentTime) {
+        return Y_CENTERED;
+    }
+
+    // If the slider has not been judged/hit yet, it stays centered
+    if (!note.judged) {
+        return Y_CENTERED;
+    }
+
     const laneDist = KEY_BOX_SPACING / 2;
     const ySpeed = laneDist / 75; 
     const step = 4; 
@@ -42,33 +57,32 @@ function getSnakyY(note, targetTime) {
         ? note.actualHitTime
         : note.startTime;
 
-    // ──────── NEW: Head (and pre-hit body) now snaps to hitLane ────────
-    // This makes the slider head behave exactly like a circle's hit circle.
-    // The body remains fully snaky after the actual hit time.
     const isJudged = note.judged && !note.isMissed;
     let hitLaneY = Y_CENTERED;
     if (isJudged && typeof note.hitLane !== 'undefined' && note.hitLane !== -1) {
         hitLaneY = note.hitLane === 0 
             ? Y_CENTERED - laneDist 
             : Y_CENTERED + laneDist;
+    } else if (!isJudged) {
+        return Y_CENTERED;
     }
 
-    // ──────── REFINED SNAKY LOGIC ────────
-    // calculationTime determines how far into the simulation we go.
+    // ──────── SNAKY LOGIC AFTER JUDGMENT LINE ────────
+    // calculationTime determines how far into the simulation we go (capped at targetTime, currentTime, and missedAt)
     let calculationTime = targetTime;
+    if (typeof currentTime === 'number') {
+        calculationTime = Math.min(calculationTime, currentTime);
+    }
     if (note.isMissed) {
         const missTime = note.missedAt || note.startTime;
-        calculationTime = Math.min(targetTime, missTime);
+        calculationTime = Math.min(calculationTime, missTime);
     }
 
-    let currentY = Y_CENTERED;
-    if (isJudged) {
-        currentY = hitLaneY;   // start simulation from the hit lane
-    }
+    let currentY = hitLaneY;
 
     // Simulate movement only up to the calculationTime
     for (let t = note.startTime; t <= calculationTime; t += step) {
-        let targetY = getSliderTargetY(t, hitTime); 
+        let targetY = getSliderTargetY(t, hitTime, currentTime); 
 
         // Force the head + any body points BEFORE the actual hit time
         // to stay at the hit lane (retroactive snap for late hits).

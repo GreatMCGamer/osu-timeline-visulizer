@@ -116,14 +116,14 @@ function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiam
         ? judgmentDiameterPx * 0.92 
         : 35;
 
-    // ──────── BUILD SNAKY PATH (unchanged) ────────
+    // ──────── BUILD SNAKY PATH ────────
     const path = new Path2D();
     const step = 4;
-    path.moveTo(xStart, getSnakyY(note, note.startTime));
+    path.moveTo(xStart, getSnakyY(note, note.startTime, currentTime));
     for (let t = note.startTime + step; t <= note.endTime; t += step) {
-        path.lineTo(playheadX + (t - currentTime) * pxPerMs, getSnakyY(note, t));
+        path.lineTo(playheadX + (t - currentTime) * pxPerMs, getSnakyY(note, t, currentTime));
     }
-    path.lineTo(xEnd, getSnakyY(note, note.endTime));
+    path.lineTo(xEnd, getSnakyY(note, note.endTime, currentTime));
 
     // ──────── SCRATCH CANVAS SETUP (unchanged) ────────
     if (!window.sliderScratch) {
@@ -378,7 +378,7 @@ function draw() {
                     const tickX = xStart + frac * (xEnd - xStart);
                     
                     // Use snaky Y position for the tick
-                    const tickY = getSnakyY(note, tickTime);
+                    const tickY = getSnakyY(note, tickTime, currentTime);
 
                     let tickCanvas = null;
                     if (note.isMissed && hasSliderTickTexture) {
@@ -409,7 +409,7 @@ function draw() {
 
         if (note.type === 'circle' || note.type === 'slider') {
             const yPos = note.type === 'slider' 
-                ? getSnakyY(note, note.startTime) 
+                ? getSnakyY(note, note.startTime, currentTime) 
                 : getHitCircleY(note);
                 
             drawHitCircle(xStart, note.comboColorIndex, note.isMissed, judgmentDiameterPx, yPos - Y_CENTERED);
