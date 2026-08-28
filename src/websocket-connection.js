@@ -40,8 +40,7 @@ function logConnectionStatus(status, detail) {
             `[osu! Timeline] Browser Mixed-Content Restriction:\n` +
             `This page was loaded securely over HTTPS (${window.location.protocol}//).\n` +
             `Modern web browsers prohibit unencrypted 'ws://' connections to local addresses (127.0.0.1).\n` +
-            `• For OBS Studio: Add Browser Source using 'http://localhost:3000' (or local HTML file) so it connects over standard HTTP.\n` +
-            `• In Cloud Preview: Interactive Demo Mode is running so you can preview the 60 FPS timeline.`
+            `• For OBS Studio: Add Browser Source using 'http://localhost:3000' (or local HTML file) so it connects over standard HTTP.`
         );
     } else if (status === 'disconnected') {
         console.log(`[osu! Timeline] Waiting for tosu at ${tosuConfig.wsBase} (tosu/gosumemory not detected on port ${tosuConfig.host.split(':')[1] || '24050'}).`);
@@ -65,11 +64,6 @@ function scheduleReconnect() {
         tosuConnectionStatus = 'https_restricted';
         logConnectionStatus('https_restricted');
         notifyUIStatus();
-
-        // Auto-enable demo mode so the user has an immediate, working, interactive timeline
-        if (!isDemoMode && typeof startDemoMode === 'function') {
-            startDemoMode();
-        }
         return; // Cease automatic looping on HTTPS
     }
 
@@ -111,6 +105,228 @@ function handleSocketFailure() {
     scheduleReconnect();
 }
 
+function processKeyAndHitData(keysData, hitErrorsData, liveTime) {
+    if (keysData) {
+        const keyNames = ['k1', 'k2', 'm1', 'm2'];
+        const titleCaseNames = ['KeyK1', 'KeyK2', 'KeyM1', 'KeyM2'];
+
+        for (let i = 0; i < 4; i++) {
+            const k = keyNames[i];
+            const keyData = keysData[k] || keysData[titleCaseNames[i]];
+            if (!keyData) continue;
+
+            const isDown = keyData.isPressed === true;
+            const kCount = typeof keyData.count === 'number' ? keyData.count : 0;
+
+            // Handle count reset or rewinds
+            if (kCount < lastCounts[k]) {
+                lastCounts[k] = kCount;
+                if (activeStrokes[k]) {
+                    activeStrokes[k].endTime = Math.max(liveTime, activeStrokes[k].startTime + MIN_KEY_PRESS_DURATION_MS);
+                    activeStrokes[k] = null;
+                }
+            }
+
+            const hasNewPress = (kCount > lastCounts[k]) || (isDown && !keyBoxStates[k]);
+
+            if (hasNewPress) {
+                // Close any orphan or previously open stroke for this key before starting a new one
+                if (activeStrokes[k]) {
+                    activeStrokes[k].endTime = Math.max(liveTime, activeStrokes[k].startTime + MIN_KEY_PRESS_DURATION_MS);
+                    activeStrokes[k] = null;
+                }
+
+                const strokeStartTime = liveTime;
+                const minEnd = strokeStartTime + MIN_KEY_PRESS_DURATION_MS;
+                
+                // Create the stroke visually with guaranteed minimum duration
+                const stroke = { 
+                    key: k, 
+                    startTime: strokeStartTime, 
+                    endTime: isDown ? null : minEnd,
+                    matched: false
+                };
+                keyStrokes.push(stroke);
+                activeStrokes[k] = isDown ? stroke : null;
+
+                // IMMEDIATE MATCHING: Check if this press generated a hit error
+                if (hitErrorsData && hitErrorsData.length > hitErrorCount) {
+                    const latestError = hitErrorsData[hitErrorsData.length - 1];
+
+                    // Find the note that fits this press within OD window tolerance
+                    let bestObj = null;
+                    let minDiff = Infinity;
+                    const searchTolerance = Math.max(120, (typeof hitWindow50 !== 'undefined' ? hitWindow50 : 150));
+
+                    for (let j = 0; j < hitObjects.length; j++) {
+                        const obj = hitObjects[j];
+                        if (obj.judged) continue;
+                        const trueHitTime = obj.startTime + latestError;
+                        const diff = Math.abs(strokeStartTime - trueHitTime);
+                        if (diff < searchTolerance && diff < minDiff) {
+                            minDiff = diff;
+                            bestObj = obj;
+                        }
+                    }
+                
+                    if (bestObj) {
+                        bestObj.judged = true;
+                        bestObj.isMissed = false;
+                        bestObj.hitLane = (k === 'k1' || k === 'm1') ? 0 : 1;
+                        bestObj.actualHitTime = bestObj.startTime + latestError;
+
+                        stroke.matched = true;
+                        stroke.startTime = bestObj.actualHitTime;
+                        if (stroke.endTime !== null) {
+                            stroke.endTime = Math.max(stroke.endTime, stroke.startTime + MIN_KEY_PRESS_DURATION_MS);
+                        }
+
+                        hitErrorCount = hitErrorsData.length;
+                    }
+                }
+            } else if (!isDown) {
+                // Key is not down: close active stroke if one exists
+                if (activeStrokes[k]) {
+                    activeStrokes[k].endTime = Math.max(liveTime, activeStrokes[k].startTime + MIN_KEY_PRESS_DURATION_MS);
+                    activeStrokes[k] = null;
+                }
+            }
+
+            lastCounts[k] = kCount;
+            keyBoxStates[k] = isDown;
+        }
+    }
+
+    if (hitErrorsData) {
+        const newCount = hitErrorsData.length;
+        if (newCount < hitErrorCount) {
+            // Handle map restarts/rewinds
+            hitErrorCount = newCount;
+            if (hitObjects) {
+                for (let i = 0; i < hitObjects.length; i++) {
+                    const h = hitObjects[i];
+                    h.judged = false;
+                    h.isMissed = false;
+                    h.hitLane = -1;
+                }
+            }
+        } else {
+            hitErrorCount = newCount; 
+        }
+    }
+}
+
+function parseWebsocketPayload(data) {
+    if (!data || typeof data !== 'object') return;
+    const now = performance.now();
+    lastReceiveTime = now;
+
+    // 1. Skin folder
+    const skinFolder = data.settings?.folders?.skin || data.folders?.skin || data.skinFolder;
+    if (skinFolder && skinFolder !== lastSkinFolder) {
+        isNewSkin = true;
+        lastSkinFolder = skinFolder;
+        loadSkinIniColors();
+        loadTextures();
+    }
+
+    // 2. Game State
+    let incomingState = null;
+    if (typeof data.menu?.state === 'number') {
+        const num = data.menu.state;
+        incomingState = (num === 2) ? 'play' : (num === 1 || num === 11 ? 'songselect' : (num === 7 ? 'results' : 'menu'));
+    } else if (data.state?.name) incomingState = String(data.state.name);
+    else if (typeof data.stateName === 'string') incomingState = data.stateName;
+    else if (typeof data.state === 'string') incomingState = data.state;
+    else if (typeof data.state?.number === 'number') {
+        const num = data.state.number;
+        incomingState = (num === 2) ? 'play' : (num === 1 || num === 11 ? 'songselect' : (num === 7 ? 'results' : 'menu'));
+    }
+
+    if (incomingState) {
+        const normalizedState = incomingState.toLowerCase();
+        if (normalizedState !== gameStateName) {
+            if (normalizedState === 'play' || normalizedState === 'songselect' || normalizedState === 'menu') {
+                resetTimelineState();
+            }
+            gameStateName = normalizedState;
+        }
+    }
+
+    // 3. Beatmap Information & Checksum
+    const bm = data.menu?.bm || data.beatmap || null;
+    if (bm) {
+        if (bm.metadata) {
+            mapTitle = `${bm.metadata.artist || 'Unknown'} - ${bm.metadata.title || 'Unknown'} [${bm.metadata.difficulty || 'Normal'}]`;
+        } else if (bm.artist || bm.title) {
+            mapTitle = `${bm.artist || 'Unknown'} - ${bm.title || 'Unknown'} [${bm.version || bm.difficulty || 'Normal'}]`;
+        }
+
+        const cs = bm.md5 || bm.checksum || (bm.id ? String(bm.id) : null);
+        if (cs && cs !== lastChecksum) {
+            lastChecksum = cs;
+            resetTimelineState();
+            fetchBeatmap(bm);
+        }
+
+        updateComboColors();
+        if (typeof hasHitCircleTexture !== 'undefined' && hasHitCircleTexture) {
+            createTintedVersions();
+        }
+    }
+
+    // 4. Live Timeline Time
+    const commonLiveTime = (bm && bm.time && typeof bm.time.current === 'number') ? bm.time.current :
+                           (bm && bm.time && typeof bm.time.live === 'number') ? bm.time.live :
+                           (typeof data.currentTime === 'number') ? data.currentTime :
+                           (typeof data.time === 'number') ? data.time : null;
+
+    if (commonLiveTime !== null) {
+        let dtTosu = 0;
+        if (lastCommonLiveTime > 0) {
+            dtTosu = commonLiveTime - lastCommonLiveTime;
+            if (dtTosu < -500) { resetTimelineState(); }
+        }
+        lastCommonLiveTime = commonLiveTime;
+        lastCommonRealTime = now;
+    }
+
+    // 5. Combo & Misses
+    const currentCombo = (data.gameplay && data.gameplay.combo && typeof data.gameplay.combo.current === 'number') 
+        ? data.gameplay.combo.current 
+        : (data.play && data.play.combo && typeof data.play.combo.current === 'number') 
+        ? data.play.combo.current 
+        : null;
+
+    if (currentCombo !== null) {
+        if (currentCombo < lastCombo && lastCombo > 0) {
+            const hits = data.gameplay?.hits || data.play?.hits;
+            const gameMisses = (hits && typeof hits["0"] === 'number') ? hits["0"] : 0;
+            if (gameMisses === ourDetectedMissCount) {
+                markSliderAsMissed();
+            }
+        }
+        lastCombo = currentCombo;
+    }
+
+    // 6. Keys and Hit Errors
+    const keyData = data.gameplay?.keyOverlay || data.keys || null;
+    const hitErrorsData = Array.isArray(data.gameplay?.hitErrorArray) ? data.gameplay.hitErrorArray :
+                          (Array.isArray(data.hitErrors) ? data.hitErrors : 
+                          (Array.isArray(data.tourney) && data.tourney[0] && Array.isArray(data.tourney[0].hitErrors)) ? data.tourney[0].hitErrors : null);
+
+    let activeLiveTime = 0;
+    if (lastCommonLiveTime > 0) {
+        activeLiveTime = lastCommonLiveTime + (now - lastCommonRealTime) * (currentSpeed || 1.0);
+    } else {
+        activeLiveTime = lastCommonLiveTime || 0;
+    }
+
+    if (keyData || hitErrorsData) {
+        processKeyAndHitData(keyData, hitErrorsData, activeLiveTime);
+    }
+}
+
 function connect(isManual = false) {
     if (reconnectTimer) {
         clearTimeout(reconnectTimer);
@@ -130,9 +346,6 @@ function connect(isManual = false) {
         tosuConnectionStatus = 'https_restricted';
         logConnectionStatus('https_restricted');
         notifyUIStatus();
-        if (!isDemoMode && typeof startDemoMode === 'function') {
-            startDemoMode();
-        }
         return;
     }
 
@@ -153,95 +366,14 @@ function connect(isManual = false) {
             tosuConnectionStatus = 'connected';
             connectionRetryCount = 0;
             logConnectionStatus('connected');
-            if (typeof isDemoMode !== 'undefined' && isDemoMode) {
-                if (typeof stopDemoMode === 'function') stopDemoMode();
-            }
             notifyUIStatus();
         };
 
         wsCommon.onmessage = (e) => {
-            let data;
             try {
-                data = JSON.parse(e.data);
-            } catch (err) {
-                return;
-            }
-            const now = performance.now();
-            
-            if (data.folders?.skin !== undefined) {
-                if (data.folders.skin !== lastSkinFolder) {
-                    isNewSkin = true;
-                    lastSkinFolder = data.folders.skin;
-                    
-                    // Load real skin colors from skin.ini
-                    loadSkinIniColors();
-                    
-                    // Trigger texture reload
-                    loadTextures(); 
-                }
-            }
-
-            let incomingState = null;
-            if (data.state?.name) incomingState = String(data.state.name);
-            else if (typeof data.stateName === 'string') incomingState = data.stateName;
-            else if (typeof data.state === 'string') incomingState = data.state;
-            else if (typeof data.state?.number === 'number') {
-                const num = data.state.number;
-                incomingState = (num === 2) ? 'play' : (num === 1 || num === 11 ? 'songselect' : (num === 7 ? 'results' : 'menu'));
-            }
-
-            if (incomingState) {
-                const normalizedState = incomingState.toLowerCase();
-                if (normalizedState !== gameStateName) {
-                    if (normalizedState === 'play' || normalizedState === 'songselect' || normalizedState === 'menu') {
-                        resetTimelineState();
-                    }
-                    gameStateName = normalizedState;
-                }
-            }
-            if (data.beatmap) {
-                mapTitle = `${data.beatmap.artist} - ${data.beatmap.title} [${data.beatmap.version || 'Unknown'}]`;
-                const cs = data.beatmap.checksum;
-                if (cs && cs !== lastChecksum) {
-                    lastChecksum = cs;
-                    resetTimelineState();
-                    fetchBeatmap(data.beatmap);
-                }
-                updateComboColors();
-                if (typeof hasHitCircleTexture !== 'undefined' && hasHitCircleTexture) {
-                    createTintedVersions();
-                }
-                
-                const commonLiveTime = data.beatmap.time?.live;
-                if (commonLiveTime !== undefined && typeof commonLiveTime === 'number') {
-                    lastReceiveTime = now;
-                    let dtTosu = 0, dtReal = 0;
-                    if (lastCommonLiveTime > 0) {
-                        dtTosu = commonLiveTime - lastCommonLiveTime;
-                        dtReal = now - lastCommonRealTime;
-                        if (dtTosu < -500) { resetTimelineState(); dtTosu = 0; }
-                    }
-                    lastCommonLiveTime = commonLiveTime;
-                    lastCommonRealTime = now;
-                }
-            }
-
-            if (data.play && data.play.combo && typeof data.play.combo.current === 'number') {
-                const currCombo = data.play.combo.current;
-                if (currCombo < lastCombo && lastCombo > 0) {
-                    const gameMisses = (data.play.hits && typeof data.play.hits["0"] === 'number') ? data.play.hits["0"] : 0;
-                    if (gameMisses === ourDetectedMissCount) {
-                        markSliderAsMissed();
-                    }
-                }
-                lastCombo = currCombo;
-            }
-
-            // In some tosu versions, currentTime is at top-level of wsCommon
-            if (data.currentTime !== undefined && typeof data.currentTime === 'number') {
-                lastCommonLiveTime = data.currentTime;
-                lastCommonRealTime = now;
-            }
+                const data = JSON.parse(e.data);
+                parseWebsocketPayload(data);
+            } catch (err) {}
         };
 
         wsCommon.onclose = () => {
@@ -249,7 +381,6 @@ function connect(isManual = false) {
         };
 
         wsCommon.onerror = () => {
-            // Quiet handler — avoid noisy raw Event object dumps to console
             handleSocketFailure();
         };
     } catch (err) {
@@ -257,164 +388,30 @@ function connect(isManual = false) {
         return;
     }
 
-    // ──────── WS PRECISE ────────
+    // ──────── WS PRECISE (High-Frequency Keys & Hit Errors) ────────
     try {
         wsPrecise = new WebSocket(preciseUrl);
 
         wsPrecise.onopen = () => {
-            // Precise socket ready
+            // High-frequency input socket ready
         };
 
         wsPrecise.onmessage = (e) => {
-            let data;
             try {
-                data = JSON.parse(e.data);
-            } catch (err) {
-                return;
-            }
-            const now = performance.now();
-            preciseWebSocketTime = data.currentTime;
-            const hitErrors = Array.isArray(data.hitErrors) ? data.hitErrors :
-                              (Array.isArray(data.tourney) && data.tourney[0] && Array.isArray(data.tourney[0].hitErrors)) ? data.tourney[0].hitErrors : null;
-
-            if (data.currentTime !== undefined && typeof data.currentTime === 'number') {
-                lastPreciseTime = data.currentTime;
-                lastPreciseRealTime = now;
-            }
-
-            // Calculate precise live time from all available synchronization sources
-            let currentLiveTime = 0;
-            if (data.currentTime !== undefined && typeof data.currentTime === 'number') {
-                currentLiveTime = data.currentTime;
-            } else if (lastPreciseTime > 0) {
-                const dt = (now - lastPreciseRealTime) * (currentSpeed || 1.0);
-                currentLiveTime = lastPreciseTime + Math.min(Math.max(0, dt), 3000);
-            } else if (lastCommonLiveTime > 0) {
-                const dt = (now - lastCommonRealTime) * (currentSpeed || 1.0);
-                currentLiveTime = lastCommonLiveTime + Math.min(Math.max(0, dt), 3000);
-            }
-            
-            if (data.keys) {
-                const keys = data.keys;
-
-                const keyNames = ['k1', 'k2', 'm1', 'm2'];
-                const titleCaseNames = ['KeyK1', 'KeyK2', 'KeyM1', 'KeyM2'];
-
-                for (let i = 0; i < 4; i++) {
-                    const k = keyNames[i];
-                    const keyData = keys[k] || keys[titleCaseNames[i]];
-                    if (!keyData) continue;
-
-                    const isDown = keyData.isPressed === true;
-                    const kCount = typeof keyData.count === 'number' ? keyData.count : 0;
-
-                    // Handle count reset or rewinds
-                    if (kCount < lastCounts[k]) {
-                        lastCounts[k] = kCount;
-                        if (activeStrokes[k]) {
-                            activeStrokes[k].endTime = Math.max(currentLiveTime, activeStrokes[k].startTime + MIN_KEY_PRESS_DURATION_MS);
-                            activeStrokes[k] = null;
-                        }
-                    }
-
-                    const hasNewPress = (kCount > lastCounts[k]) || (isDown && !keyBoxStates[k]);
-
-                    if (hasNewPress) {
-                        // Close any orphan or previously open stroke for this key before starting a new one
-                        if (activeStrokes[k]) {
-                            activeStrokes[k].endTime = Math.max(currentLiveTime, activeStrokes[k].startTime + MIN_KEY_PRESS_DURATION_MS);
-                            activeStrokes[k] = null;
-                        }
-
-                        const strokeStartTime = currentLiveTime;
-                        const minEnd = strokeStartTime + MIN_KEY_PRESS_DURATION_MS;
-                        
-                        // Create the stroke visually with guaranteed minimum duration
-                        const stroke = { 
-                            key: k, 
-                            startTime: strokeStartTime, 
-                            endTime: isDown ? null : minEnd,
-                            matched: false
-                        };
-                        keyStrokes.push(stroke);
-                        activeStrokes[k] = isDown ? stroke : null;
-
-                        // IMMEDIATE MATCHING: Check if this press generated a hit error
-                        if (hitErrors && hitErrors.length > hitErrorCount) {
-                            const latestError = hitErrors[hitErrors.length - 1];
-
-                            // Find the note that fits this press within OD window tolerance
-                            let bestObj = null;
-                            let minDiff = Infinity;
-                            const searchTolerance = Math.max(120, (typeof hitWindow50 !== 'undefined' ? hitWindow50 : 150));
-
-                            for (let j = 0; j < hitObjects.length; j++) {
-                                const obj = hitObjects[j];
-                                if (obj.judged) continue;
-                                const trueHitTime = obj.startTime + latestError;
-                                const diff = Math.abs(strokeStartTime - trueHitTime);
-                                if (diff < searchTolerance && diff < minDiff) {
-                                    minDiff = diff;
-                                    bestObj = obj;
-                                }
-                            }
-                        
-                            if (bestObj) {
-                                bestObj.judged = true;
-                                bestObj.isMissed = false;
-                                bestObj.hitLane = (k === 'k1' || k === 'm1') ? 0 : 1;
-                                bestObj.actualHitTime = bestObj.startTime + latestError;
-
-                                stroke.matched = true;
-                                stroke.startTime = bestObj.actualHitTime;
-                                if (stroke.endTime !== null) {
-                                    stroke.endTime = Math.max(stroke.endTime, stroke.startTime + MIN_KEY_PRESS_DURATION_MS);
-                                }
-
-                                hitErrorCount = hitErrors.length;
-                            }
-                        }
-                    } else if (!isDown) {
-                        // Key is not down: close active stroke if one exists
-                        if (activeStrokes[k]) {
-                            activeStrokes[k].endTime = Math.max(currentLiveTime, activeStrokes[k].startTime + MIN_KEY_PRESS_DURATION_MS);
-                            activeStrokes[k] = null;
-                        }
-                    }
-
-                    lastCounts[k] = kCount;
-                    keyBoxStates[k] = isDown;
-                }
-            }
-
-            if (hitErrors) {
-                const newCount = hitErrors.length;
-                if (newCount < hitErrorCount) {
-                    // Handle map restarts/rewinds
-                    hitErrorCount = newCount;
-                    if (hitObjects) {
-                        for (let i = 0; i < hitObjects.length; i++) {
-                            const h = hitObjects[i];
-                            h.judged = false;
-                            h.isMissed = false;
-                            h.hitLane = -1;
-                        }
-                    }
-                } else {
-                    hitErrorCount = newCount; 
-                }
-            }
+                const data = JSON.parse(e.data);
+                parseWebsocketPayload(data);
+            } catch (err) {}
         };
 
         wsPrecise.onclose = () => {
-            handleSocketFailure();
+            wsPrecise = null;
         };
 
         wsPrecise.onerror = () => {
-            handleSocketFailure();
+            wsPrecise = null;
         };
     } catch (err) {
-        handleSocketFailure();
+        wsPrecise = null;
     }
 }
 
@@ -441,7 +438,6 @@ window.retryTosuConnection = function() {
 function resetTimelineState() { 
     hitErrorCount = 0; 
     lastCommonLiveTime = 0;
-    lastPreciseTime = 0; 
     currentSpeed = 1.0;
     ourDetectedMissCount = 0;
     lastCombo = 0;
@@ -460,3 +456,7 @@ function resetTimelineState() {
         }
     }
 }
+
+window.connect = connect;
+window.resetTimelineState = resetTimelineState;
+

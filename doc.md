@@ -15,6 +15,8 @@ osu-timeline-visulizer/
 │   ├── key-visualization.js
 │   ├── miss-logic.js
 │   ├── text-manager.js
+│   ├── demo-simulation.js
+│   ├── ui-hud.js
 │   └── main-application.js
 └── README.md
 ```
@@ -133,7 +135,26 @@ This file handles text rendering logic for beatmap titles and other text element
 - Applies visual effects like shadows and bold styling for better readability
 - Manages text positioning and line height calculations
 
-### 10. `main-application.js`
+### 10. `demo-simulation.js`
+**Purpose**: Built-in osu! gameplay simulator (Demo Mode)
+
+Provides a standalone 60 FPS beatmap simulation to preview and test the timeline without requiring osu! or tosu running:
+- Generates realistic hit circles, sliders with snaking lanes, and spinners
+- Simulates human rhythm keypresses (K1/Lane 0 and K2/Lane 1) with hit error variance
+- Can be toggled anytime via the UI button or pressing hotkey `D`
+- Automatically relinquishes control when a live tosu connection is established
+
+### 11. `ui-hud.js`
+**Purpose**: Stream HUD, status monitor, and settings drawer
+
+Provides an unobtrusive status overlay for streamers and users:
+- Displays live connection status with color-coded badges (Connected, Disconnected, Connecting, Demo Mode)
+- In-place Settings modal to adjust tosu host/port (`127.0.0.1:24050`) and scale
+- Auto-dims during active gameplay to ensure OBS scene transparency
+- Hotkeys: `D` (Toggle Demo Mode), `H` (Toggle HUD visibility)
+- URL parameters: `?demo=1` (auto-start demo), `?hideStatus=1` (hide HUD for OBS)
+
+### 12. `main-application.js`
 **Purpose**: Application heartbeat and initialization
 
 This file serves as the main application entry point that ties all components together:
@@ -141,3 +162,14 @@ This file serves as the main application entry point that ties all components to
 - Starts the main drawing animation loop
 - Acts as the central coordination point for the entire application
 - Ensures all modules are properly initialized and connected
+
+## Troubleshooting: WebSocket Connection Errors
+
+### Understanding `wsCommon error: { "isTrusted": true }`
+When a browser attempts to connect to `ws://127.0.0.1:24050` and the connection fails, the browser standard security model returns a generic DOM `Event` object with property `{ "isTrusted": true }`. This happens for two primary reasons:
+
+1. **tosu / gosumemory is not running**: tosu must be actively running on your PC on port `24050`.
+2. **HTTPS Mixed Content Restriction**: If the timeline overlay is opened in a web browser over HTTPS (e.g. `https://...`), web browsers strictly prohibit opening unencrypted `ws://` connections to `127.0.0.1` or `localhost`.
+   - **Fix for OBS Studio**: Add the timeline as a **Browser Source** pointing to `http://localhost:3000` (over standard HTTP) or as a local file. This avoids the mixed-content block.
+   - **For Testing / Preview**: Click the **Play Demo** button (or press `D`) to immediately test all visual effects without tosu.
+

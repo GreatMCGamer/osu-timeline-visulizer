@@ -53,4 +53,4 @@ Contributions are welcome! Please follow these steps:
 ## Dependencies
 
 - OBS
-- tosu/gosumemory running locally on port 24050
+- tosu

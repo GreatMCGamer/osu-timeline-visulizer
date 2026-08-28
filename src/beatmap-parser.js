@@ -11,8 +11,31 @@ async function fetchBeatmap(directPath) {
         // from caching the old beatmap file, fixing the timeline freezing issue.
         const cacheBuster = typeof lastChecksum !== 'undefined' ? lastChecksum : Date.now();
         const baseUrl = (typeof tosuConfig !== 'undefined' && tosuConfig.httpBase) ? tosuConfig.httpBase : 'http://127.0.0.1:24050';
-        const res = await fetch(`${baseUrl}/files/beatmap/file?cs=${cacheBuster}`);
-        const text = await res.text();
+        
+        let text = null;
+        
+        // 1. Try standard /files/beatmap/file endpoint
+        try {
+            const res = await fetch(`${baseUrl}/files/beatmap/file?cs=${cacheBuster}`);
+            if (res.ok) {
+                text = await res.text();
+            }
+        } catch (e) {}
+
+        // 2. Fallback to direct song folder / file path if available
+        if (!text && directPath && directPath.path && directPath.path.folder && directPath.path.file) {
+            try {
+                const folderEnc = encodeURIComponent(directPath.path.folder);
+                const fileEnc = encodeURIComponent(directPath.path.file);
+                const res = await fetch(`${baseUrl}/Songs/${folderEnc}/${fileEnc}?cs=${cacheBuster}`);
+                if (res.ok) {
+                    text = await res.text();
+                }
+            } catch (e) {}
+        }
+
+        if (!text) return;
+
         const result = parseOsuFile(text);
         
         hitObjects = result.objs;

@@ -85,7 +85,7 @@ function getHitCircleY(note) {
 }
 
 // Static gradient layer configurations to avoid allocations inside the 60 FPS render loop
-const SLIDER_GRADIENT_LAYERS = [
+var SLIDER_GRADIENT_LAYERS = window.SLIDER_GRADIENT_LAYERS || [
     { widthFactor: 1.0, alpha: 0.05, brightness: 0.10 },
     { widthFactor: 0.9, alpha: 0.50, brightness: 0.18 },
     { widthFactor: 0.8, alpha: 0.50, brightness: 0.32 },
@@ -97,6 +97,7 @@ const SLIDER_GRADIENT_LAYERS = [
     { widthFactor: 0.2, alpha: 0.50, brightness: 0.97 },
     { widthFactor: 0.1, alpha: 0.50, brightness: 1.00 }
 ];
+window.SLIDER_GRADIENT_LAYERS = SLIDER_GRADIENT_LAYERS;
 
 function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiameterPx) {
     const col = comboColors[note.comboColorIndex % comboColors.length];
@@ -204,7 +205,7 @@ function draw() {
     const state = (gameStateName || '').toLowerCase();
     const isPlay = (state === 'play' || state === 'playing');
     const isPause = (state === 'pause' || state === 'paused');
-    const isTimelineVisible = isDemoMode || isPlay || isPause;
+    const isTimelineVisible = isPlay || isPause;
 
     // Timeline is hidden during Song Select, Menus, Results, etc.
     if (!isTimelineVisible) {
@@ -221,25 +222,19 @@ function draw() {
     }
 
     // Check packet freshness
-    if (now - lastReceiveTime > 1500 && !isDemoMode) {
+    if (now - lastReceiveTime > 1500) {
         currentSpeed = 0;
-    } else if (!isDemoMode && currentSpeed === 0 && !isPause) {
+    } else if (currentSpeed === 0 && !isPause) {
         currentSpeed = 1.0;
     }
 
     // Calculate current live timeline position
     let currentTime = 0;
-    if (isDemoMode) {
-        currentTime = lastPreciseTime || 0;
-    } else if (isPause) {
-        // While paused, do NOT extrapolate forward with elapsed delta.
-        // Lock strictly to the exact paused position reported by tosu to prevent jerking/jitter.
-        currentTime = (lastPreciseTime > 0) ? lastPreciseTime : (lastCommonLiveTime || 0);
-    } else if (lastPreciseTime > 0 && (now - lastPreciseRealTime < 250)) {
-        // High-frequency precise socket time + elapsed delta during active play
-        currentTime = lastPreciseTime + (now - lastPreciseRealTime) * currentSpeed;
+    if (isPause) {
+        // While paused, lock strictly to the exact paused position reported by tosu
+        currentTime = lastCommonLiveTime || 0;
     } else if (lastCommonLiveTime > 0) {
-        // Smooth interpolation between tosu WebSocket packets during active play
+        // Smooth interpolation from websocket liveTime
         const dt = (now - lastCommonRealTime) * currentSpeed;
         const clampedDt = Math.min(Math.max(0, dt), 1000);
         currentTime = lastCommonLiveTime + clampedDt;
@@ -257,15 +252,16 @@ function draw() {
     }
 
     // ──────── HIT WINDOWS — fully unclamped for OD ≤ 0 ────────
-    let hitWindow50  = 199.5 - (beatmapOD * 10);
-    let hitWindow100 = 139.5 - (beatmapOD * 8);
-    let hitWindow300 = 79.5  - (beatmapOD * 6);
+    const currentOD = (typeof beatmapOD === 'number' && !isNaN(beatmapOD)) ? beatmapOD : 8.0;
+    hitWindow50  = 199.5 - (currentOD * 10);
+    hitWindow100 = 139.5 - (currentOD * 8);
+    hitWindow300 = 79.5  - (currentOD * 6);
 
     const tosuLeeway = 350; 
     const judgmentDiameterPx = Math.max(0, hitWindow50 * 2 * pxPerMs);
 
     // Miss detection for unjudged hit objects (only during active song playback, NEVER while paused)
-    const isPlayingState = (isDemoMode || isPlay) && !isPause;
+    const isPlayingState = isPlay && !isPause;
     if (isPlayingState) {
         for (let i = 0; i < hitObjects.length; i++) {
             const note = hitObjects[i];
@@ -435,7 +431,12 @@ function draw() {
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     
     // Live debug output
-    const debugInfo = `${(currentTime/1000).toFixed(2)}s | State: ${gameStateName} | Speed: ${currentSpeed.toFixed(2)}x | OD: ${beatmapOD.toFixed(1)} | 50w: ${hitWindow50.toFixed(1)}ms | liveTime: ${lastCommonLiveTime.toFixed(0)}ms | preciseTime: ${lastPreciseTime.toFixed(0)}ms`;
+    const safeTime = (typeof currentTime === 'number' && !isNaN(currentTime)) ? currentTime : 0;
+    const safeOD = (typeof beatmapOD === 'number' && !isNaN(beatmapOD)) ? beatmapOD : 8.0;
+    const safe50w = (typeof hitWindow50 === 'number' && !isNaN(hitWindow50)) ? hitWindow50 : 119.5;
+    const safeLiveTime = (typeof lastCommonLiveTime === 'number' && !isNaN(lastCommonLiveTime)) ? lastCommonLiveTime : 0;
+    
+    const debugInfo = `${(safeTime/1000).toFixed(2)}s | State: ${gameStateName || 'unknown'} | OD: ${safeOD.toFixed(1)} | 50w: ${safe50w.toFixed(1)}ms | liveTime: ${safeLiveTime.toFixed(0)}ms`;
     ctx.fillText(debugInfo, 15, canvas.height - 10);
 
     if (SHOW_DEBUG_PANEL) {
@@ -445,15 +446,16 @@ function draw() {
         ctx.font = '14px Arial';
         ctx.fillText('DEBUG PANEL', canvas.width - 290, 25);
         let y = 45;
-        ctx.fillText(`Game State: ${gameStateName}`, canvas.width - 290, y); y += 20;
+        ctx.fillText(`Game State: ${gameStateName || 'unknown'}`, canvas.width - 290, y); y += 20;
         ctx.fillText(`Key States:`, canvas.width - 290, y); y += 20;
         for (const key in keyBoxStates) {
-            ctx.fillText(`${key}: ${keyBoxStates[key] ? 'DOWN' : 'UP'} (count: ${lastCounts[key]})`, canvas.width - 290, y);
+            ctx.fillText(`${key}: ${keyBoxStates[key] ? 'DOWN' : 'UP'} (count: ${lastCounts[key] || 0})`, canvas.width - 290, y);
             y += 20;
         }
-        ctx.fillText(`currentLiveTime: ${lastCommonLiveTime.toFixed(0)}ms`, canvas.width - 290, y); y += 20;
-        ctx.fillText(`lastPreciseTime: ${lastPreciseTime.toFixed(0)}ms`, canvas.width - 290, y); y += 20;
+        ctx.fillText(`liveTime: ${safeLiveTime.toFixed(0)}ms`, canvas.width - 290, y); y += 20;
     }
 
     requestAnimationFrame(draw);
 }
+
+window.draw = draw;

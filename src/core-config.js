@@ -57,7 +57,6 @@ const tosuConfig = {
     isSecure: urlParams.get('secure') === 'true' || urlParams.get('wss') === 'true',
     isHttps: window.location.protocol === 'https:',
     hideStatus: urlParams.get('hideStatus') === '1' || urlParams.get('hideStatus') === 'true',
-    startDemo: urlParams.get('demo') === '1' || urlParams.get('demo') === 'true',
     get wsBase() {
         return (this.isSecure ? 'wss://' : 'ws://') + this.host;
     },
@@ -67,8 +66,7 @@ const tosuConfig = {
 };
 
 let isTosuConnected = false;
-let isDemoMode = false;
-let tosuConnectionStatus = 'disconnected'; // 'disconnected' | 'connecting' | 'connected' | 'demo'
+let tosuConnectionStatus = 'disconnected'; // 'disconnected' | 'connecting' | 'connected'
 let connectionRetryCount = 0;
 let hasLoggedHttpsWarning = false;
 
@@ -79,6 +77,9 @@ let hitObjects = [];
 let timingPoints = [];
 let beatmapComboColors = [];
 let beatmapOD = 8.0;
+let hitWindow50 = 119.5;
+let hitWindow100 = 75.5;
+let hitWindow300 = 31.5;
 let beatmapSliderTickRate = 1.0;
 let lastChecksum = '';
 let mapTitle = 'Waiting for map...';
@@ -91,10 +92,7 @@ let sliderStyle = 2;
 let gameStateName = 'Menu';
 let lastReceiveTime = performance.now();
 
-let lastPreciseTime = 0;
-let lastPreciseRealTime = 0;
 let hitErrorCount = 0;
-let preciseWebSocketTime = 0;
 
 let lastCommonLiveTime = 0;
 let lastCommonRealTime = 0;

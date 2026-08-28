@@ -7,7 +7,7 @@
 // relevant at the moment the combo break packet arrives (within the normal
 // 100-200 ms poll delay).
 function markSliderAsMissed() {
-    const now = lastPreciseTime || lastCommonLiveTime || 0;
+    const now = lastCommonLiveTime || 0;
     for (let i = hitObjects.length - 1; i >= 0; i--) {
         const note = hitObjects[i];
         if (note.type === 'slider' && !note.isMissed) {
@@ -55,7 +55,7 @@ function processHitErrors(hitErrors) {
                     }
                 }
                 
-                let estimatedHitTime = lastPreciseTime - 20;
+                let estimatedHitTime = lastCommonLiveTime - 20;
                 let estimatedObjStartTime = estimatedHitTime - error;
                 let timeDiff = Math.abs(obj.startTime - estimatedObjStartTime);
                 
@@ -81,7 +81,7 @@ function processHitErrors(hitErrors) {
                         obj.judged = true;
                         if (!obj.isMissed) {
                             obj.isMissed = true;
-                            obj.missedAt = lastPreciseTime || obj.startTime;
+                            obj.missedAt = lastCommonLiveTime || obj.startTime;
                             ourDetectedMissCount++;
                         }
                     }
