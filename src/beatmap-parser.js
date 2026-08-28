@@ -10,7 +10,8 @@ async function fetchBeatmap(directPath) {
         // Appending the checksum query parameter completely prevents the browser 
         // from caching the old beatmap file, fixing the timeline freezing issue.
         const cacheBuster = typeof lastChecksum !== 'undefined' ? lastChecksum : Date.now();
-        const res = await fetch(`http://127.0.0.1:24050/files/beatmap/file?cs=${cacheBuster}`);
+        const baseUrl = (typeof tosuConfig !== 'undefined' && tosuConfig.httpBase) ? tosuConfig.httpBase : 'http://127.0.0.1:24050';
+        const res = await fetch(`${baseUrl}/files/beatmap/file?cs=${cacheBuster}`);
         const text = await res.text();
         const result = parseOsuFile(text);
         

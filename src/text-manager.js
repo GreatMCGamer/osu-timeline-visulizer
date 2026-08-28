@@ -1,30 +1,37 @@
 // ──────── TEXT MANAGER ────────
 // Handles text rendering logic for beatmap titles and other text elements.
+// Caches line calculations to ensure zero-allocation 60+ FPS render loops.
 
-function renderBeatmapTitle() {
+let cachedTitleText = '';
+let cachedCanvasW = 0;
+let cachedCanvasH = 0;
+let cachedTitleFontSize = 24;
+let cachedTitleLines = [];
+
+function updateTitleLayout() {
     const canvasHeight = canvas.height;
     const canvasWidth = canvas.width;
     const maxWidth = canvasWidth * 0.3;
     const maxHeight = canvasHeight * 0.8;
     const lineHeightFactor = 1.2;
 
-    let fontSize = canvasHeight * 0.8; // start big
-    let bestLines = [mapTitle];
+    const titleToWrap = mapTitle || 'Waiting for map...';
+    let fontSize = canvasHeight * 0.8;
+    let bestLines = [titleToWrap];
     let bestFontSize = fontSize;
 
     // Binary search for the largest font that fits after wrapping
-    let low = 10;                    // reasonable minimum
+    let low = 10;
     let high = fontSize;
 
     while (low <= high) {
         const mid = Math.floor((low + high) / 2);
         ctx.font = `bold ${mid}px Arial`;
 
-        const lines = wrapText(mapTitle, mid, maxWidth);           // ← wrap at this size
+        const lines = wrapText(titleToWrap, mid, maxWidth);
         const totalH = lines.length * mid * lineHeightFactor;
 
         if (totalH <= maxHeight) {
-            // feasible – try bigger
             bestLines = lines;
             bestFontSize = mid;
             low = mid + 1;
@@ -33,40 +40,51 @@ function renderBeatmapTitle() {
         }
     }
 
-    fontSize = bestFontSize;
-    titleLines = bestLines;
+    cachedTitleFontSize = bestFontSize;
+    cachedTitleLines = bestLines;
+    cachedTitleText = mapTitle;
+    cachedCanvasW = canvasWidth;
+    cachedCanvasH = canvasHeight;
+}
 
-    // Now render with the optimal size/lines
-    ctx.textBaseline = 'middle';           // ← add this
-    ctx.font = `bold ${fontSize}px Arial`;
+function renderBeatmapTitle() {
+    if (!mapTitle) return;
+
+    if (mapTitle !== cachedTitleText || canvas.width !== cachedCanvasW || canvas.height !== cachedCanvasH) {
+        updateTitleLayout();
+    }
+
+    const lineHeightFactor = 1.2;
+    ctx.textBaseline = 'middle';
+    ctx.font = `bold ${cachedTitleFontSize}px Arial`;
     ctx.shadowBlur = 8;
     ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.fillStyle = '#ffffff';
 
-    const lineHeight = fontSize * lineHeightFactor;
-    const totalBlockHeight = (titleLines.length - 1) * lineHeight;   // only the gaps between lines
+    const lineHeight = cachedTitleFontSize * lineHeightFactor;
+    const totalBlockHeight = (cachedTitleLines.length - 1) * lineHeight;
 
     let currentY = Y_CENTERED - (totalBlockHeight / 2);
 
-    for (let i = 0; i < titleLines.length; i++) {
-        ctx.fillText(titleLines[i], 15, currentY);
+    for (let i = 0; i < cachedTitleLines.length; i++) {
+        ctx.fillText(cachedTitleLines[i], 15, currentY);
         currentY += lineHeight;
     }
 
     ctx.shadowBlur = 0;
-    ctx.textBaseline = 'alphabetic';       // reset for the rest of your app if needed
+    ctx.textBaseline = 'alphabetic';
 }
 
 // Greedy word wrapping function
 function wrapText(text, fontSize, maxWidth) {
     const lines = [];
-    const words = text.split(' ');
+    const words = (text || '').split(' ');
     let currentLine = '';
     
     for (let i = 0; i < words.length; i++) {
         const word = words[i];
         const testLine = currentLine ? `${currentLine} ${word}` : word;
         
-        // Measure the test line
         ctx.font = `bold ${fontSize}px Arial`;
         const testWidth = ctx.measureText(testLine).width;
         

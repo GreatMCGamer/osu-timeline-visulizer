@@ -28,18 +28,34 @@ function drawHitCircle(posX, colorIndex, isMissed = false, diameter = 20, yOffse
             // Extremely rare fallback (should never hit if hasHitCircleTexture is true)
             drawFallbackCircle(posX, colorIndex, isMissed, diameter, yOffset);
         }
+    } else {
+        // Original procedural fallback when no texture is loaded
+        if (isMissed) {
+            ctx.fillStyle = `rgba(100, 100, 100, 0.5)`;
         } else {
-                // Original procedural fallback when no texture is loaded
-                if (isMissed) {
-                    ctx.fillStyle = `rgba(100, 100, 100, 0.5)`;
-                } else {
-                    const col = comboColors[colorIndex % comboColors.length];
-                    ctx.fillStyle = `rgb(${col.r},${col.g},${col.b})`;
-                }
-                ctx.beginPath(); 
-                ctx.arc(posX, Y_CENTERED + yOffset, diameter / 2, 0, Math.PI*2); 
-                ctx.fill();
-            }
+            const col = comboColors[colorIndex % comboColors.length];
+            ctx.fillStyle = `rgb(${col.r},${col.g},${col.b})`;
+        }
+        ctx.beginPath(); 
+        ctx.arc(posX, Y_CENTERED + yOffset, diameter / 2, 0, Math.PI*2); 
+        ctx.fill();
+    }
+
+    // Prominent osu! Red "X" cross for missed hit circles
+    if (isMissed) {
+        ctx.globalAlpha = 0.95;
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = Math.max(2.5, diameter * 0.14);
+        ctx.lineCap = 'round';
+        const crossArm = diameter * 0.28;
+        const cy = Y_CENTERED + yOffset;
+        ctx.beginPath();
+        ctx.moveTo(posX - crossArm, cy - crossArm);
+        ctx.lineTo(posX + crossArm, cy + crossArm);
+        ctx.moveTo(posX + crossArm, cy - crossArm);
+        ctx.lineTo(posX - crossArm, cy + crossArm);
+        ctx.stroke();
+    }
 
     ctx.globalAlpha = 1.0;
 }
@@ -67,6 +83,20 @@ function getHitCircleY(note) {
     const laneDist = KEY_BOX_SPACING / 2;
     return note.hitLane === 0 ? Y_CENTERED - laneDist : Y_CENTERED + laneDist;
 }
+
+// Static gradient layer configurations to avoid allocations inside the 60 FPS render loop
+const SLIDER_GRADIENT_LAYERS = [
+    { widthFactor: 1.0, alpha: 0.05, brightness: 0.10 },
+    { widthFactor: 0.9, alpha: 0.50, brightness: 0.18 },
+    { widthFactor: 0.8, alpha: 0.50, brightness: 0.32 },
+    { widthFactor: 0.7, alpha: 0.50, brightness: 0.48 },
+    { widthFactor: 0.6, alpha: 0.50, brightness: 0.62 },
+    { widthFactor: 0.5, alpha: 0.50, brightness: 0.75 },
+    { widthFactor: 0.4, alpha: 0.50, brightness: 0.85 },
+    { widthFactor: 0.3, alpha: 0.50, brightness: 0.92 },
+    { widthFactor: 0.2, alpha: 0.50, brightness: 0.97 },
+    { widthFactor: 0.1, alpha: 0.50, brightness: 1.00 }
+];
 
 function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiameterPx) {
     const col = comboColors[note.comboColorIndex % comboColors.length];
@@ -123,7 +153,7 @@ function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiam
         ? activeTinted[note.comboColorIndex % activeTinted.length] 
         : null;
 
-    if (hasSliderBodyTexture && tintedBodyCanvas && tintedBodyCanvas.complete) {
+    if (hasSliderBodyTexture && tintedBodyCanvas) {
         // ──────── TEXTURE MODE (authentic osu! sliderbody) ────────
         const pattern = sCtx.createPattern(tintedBodyCanvas, 'repeat');
         if (pattern) {
@@ -138,27 +168,20 @@ function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiam
         sCtx.strokeStyle = `rgb(${styles.trackBaseRgb})`;
         sCtx.stroke(path);
 
-        // Soft radial gradient layers (smooth center glow)
-        const layers = [
-            { widthFactor: 1.0, alpha: 0.05, brightness: 0.10 }, // Gentle start
-            { widthFactor: 0.9, alpha: 0.50, brightness: 0.18 }, // Small, natural jump
-            { widthFactor: 0.8, alpha: 0.50, brightness: 0.32 },
-            { widthFactor: 0.7, alpha: 0.50, brightness: 0.48 }, // Building momentum
-            { widthFactor: 0.6, alpha: 0.50, brightness: 0.62 },
-            { widthFactor: 0.5, alpha: 0.50, brightness: 0.75 }, // Crossing the midpoint
-            { widthFactor: 0.4, alpha: 0.50, brightness: 0.85 },
-            { widthFactor: 0.3, alpha: 0.50, brightness: 0.92 },
-            { widthFactor: 0.2, alpha: 0.50, brightness: 0.97 }, // Still climbing...
-            { widthFactor: 0.1, alpha: 0.50, brightness: 1.00 }  // Reaches peak at the very end
-        ];
+        // Soft radial gradient layers (smooth center glow with zero allocations)
+        const baseR = styles.baseR !== undefined ? styles.baseR : 255;
+        const baseG = styles.baseG !== undefined ? styles.baseG : 255;
+        const baseB = styles.baseB !== undefined ? styles.baseB : 255;
+        const highR = styles.highR !== undefined ? styles.highR : 255;
+        const highG = styles.highG !== undefined ? styles.highG : 255;
+        const highB = styles.highB !== undefined ? styles.highB : 255;
 
-        for (const layer of layers) {
+        for (let li = 0; li < SLIDER_GRADIENT_LAYERS.length; li++) {
+            const layer = SLIDER_GRADIENT_LAYERS[li];
             const w = bodyWidth * layer.widthFactor;
-            const base = styles.trackBaseRgb.split(',').map(Number);
-            const high = styles.trackHighlightRgb.split(',').map(Number);
-            const r = Math.round(base[0] * (1 - layer.brightness) + high[0] * layer.brightness);
-            const g = Math.round(base[1] * (1 - layer.brightness) + high[1] * layer.brightness);
-            const b = Math.round(base[2] * (1 - layer.brightness) + high[2] * layer.brightness);
+            const r = Math.round(baseR * (1 - layer.brightness) + highR * layer.brightness);
+            const g = Math.round(baseG * (1 - layer.brightness) + highG * layer.brightness);
+            const b = Math.round(baseB * (1 - layer.brightness) + highB * layer.brightness);
 
             sCtx.globalAlpha = layer.alpha;
             sCtx.lineWidth = w;
@@ -168,7 +191,7 @@ function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiam
         sCtx.globalAlpha = 1.0;
     }
 
-    // ──────── RENDER TO MAIN CANVAS (unchanged) ────────
+    // ──────── RENDER TO MAIN CANVAS ────────
     ctx.globalAlpha = styles.alpha;
     ctx.drawImage(sCanvas, 0, 0);
     ctx.globalAlpha = 1.0;
@@ -177,12 +200,54 @@ function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiam
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const now = performance.now();
-    if (now - lastReceiveTime > 1000) { currentSpeed = 0;}
-    if (gameStateName !== 'play' && gameStateName !== 'pause') { requestAnimationFrame(draw); return; }
 
-    // The position of every object is now strictly tied to the last packet from wsPrecise.
-    let currentTime = lastPreciseTime || lastCommonLiveTime || 0;
+    const state = (gameStateName || '').toLowerCase();
+    const isPlay = (state === 'play' || state === 'playing');
+    const isPause = (state === 'pause' || state === 'paused');
+    const isTimelineVisible = isDemoMode || isPlay || isPause;
 
+    // Timeline is hidden during Song Select, Menus, Results, etc.
+    if (!isTimelineVisible) {
+        if (SHOW_DEBUG_PANEL) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(canvas.width - 300, 0, 300, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = '14px Arial';
+            ctx.fillText('DEBUG PANEL (HIDDEN IN SONG SELECT)', canvas.width - 290, 25);
+            ctx.fillText(`Game State: ${gameStateName}`, canvas.width - 290, 45);
+        }
+        requestAnimationFrame(draw);
+        return;
+    }
+
+    // Check packet freshness
+    if (now - lastReceiveTime > 1500 && !isDemoMode) {
+        currentSpeed = 0;
+    } else if (!isDemoMode && currentSpeed === 0 && !isPause) {
+        currentSpeed = 1.0;
+    }
+
+    // Calculate current live timeline position
+    let currentTime = 0;
+    if (isDemoMode) {
+        currentTime = lastPreciseTime || 0;
+    } else if (isPause) {
+        // While paused, do NOT extrapolate forward with elapsed delta.
+        // Lock strictly to the exact paused position reported by tosu to prevent jerking/jitter.
+        currentTime = (lastPreciseTime > 0) ? lastPreciseTime : (lastCommonLiveTime || 0);
+    } else if (lastPreciseTime > 0 && (now - lastPreciseRealTime < 250)) {
+        // High-frequency precise socket time + elapsed delta during active play
+        currentTime = lastPreciseTime + (now - lastPreciseRealTime) * currentSpeed;
+    } else if (lastCommonLiveTime > 0) {
+        // Smooth interpolation between tosu WebSocket packets during active play
+        const dt = (now - lastCommonRealTime) * currentSpeed;
+        const clampedDt = Math.min(Math.max(0, dt), 1000);
+        currentTime = lastCommonLiveTime + clampedDt;
+    } else {
+        currentTime = 0;
+    }
+
+    const pxPerMs = scale;
     const pastMs = playheadX / scale + 200;
     const futureMs = (canvas.width - playheadX) / scale + 200;
 
@@ -197,20 +262,22 @@ function draw() {
     let hitWindow300 = 79.5  - (beatmapOD * 6);
 
     const tosuLeeway = 350; 
-    const hitErrorLeeway = 150;
-
-    const pxPerMs = scale;
     const judgmentDiameterPx = Math.max(0, hitWindow50 * 2 * pxPerMs);
 
-    // Miss detection & key-stroke handling
-    for (let note of hitObjects) {
-        if (!note.judged) {
-            const tooLateTime = note.endTime + hitWindow50;
-            if (currentTime > tooLateTime + tosuLeeway) {
-                note.judged = true;
-                if (!note.isMissed) {
-                    note.isMissed = true;
-                    ourDetectedMissCount++;
+    // Miss detection for unjudged hit objects (only during active song playback, NEVER while paused)
+    const isPlayingState = (isDemoMode || isPlay) && !isPause;
+    if (isPlayingState) {
+        for (let i = 0; i < hitObjects.length; i++) {
+            const note = hitObjects[i];
+            if (!note.judged) {
+                const tooLateTime = note.endTime + hitWindow50;
+                if (currentTime > tooLateTime + tosuLeeway) {
+                    note.judged = true;
+                    if (!note.isMissed) {
+                        note.isMissed = true;
+                        note.missedAt = tooLateTime;
+                        ourDetectedMissCount++;
+                    }
                 }
             }
         }
@@ -219,7 +286,8 @@ function draw() {
     // Beat lines / timing grid
     if (timingPoints.length > 0) {
         let activeTP = timingPoints[0];
-        for (let tp of timingPoints) { 
+        for (let i = 0; i < timingPoints.length; i++) { 
+            const tp = timingPoints[i];
             if (tp.uninherited && tp.time <= currentTime + futureMs) activeTP = tp; 
             else if (tp.time > currentTime + futureMs) break; 
         }
@@ -242,7 +310,9 @@ function draw() {
         }
     }
 
-    for (let note of hitObjects) {
+    // Render Hit Objects (circles, sliders, spinners)
+    for (let i = 0; i < hitObjects.length; i++) {
+        const note = hitObjects[i];
         if (note.endTime < currentTime - pastMs || note.startTime > currentTime + futureMs) continue;
         
         const xStart = playheadX + (note.startTime - currentTime) * pxPerMs;
@@ -250,7 +320,9 @@ function draw() {
         let alpha = xEnd < 100 ? Math.max(0, xEnd / 100) : 1;
         ctx.globalAlpha = Math.max(0.1, alpha);
 
-        const col = comboColors[note.comboColorIndex % comboColors.length];
+        const col = (comboColors.length > 0) 
+            ? comboColors[note.comboColorIndex % comboColors.length] 
+            : DEFAULT_COMBO_COLORS[0];
 
         // Judgment meter bar
         if ((note.type === 'circle' || note.type === 'slider') && SHOW_JUDGMENT_BARS) {
@@ -289,11 +361,12 @@ function draw() {
             }
         }
 
-if (note.type === 'slider') {
+        if (note.type === 'slider') {
             drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiameterPx);
             
             let currentBeatLength = 600;
-            for (let tp of timingPoints) {
+            for (let tpi = 0; tpi < timingPoints.length; tpi++) {
+                const tp = timingPoints[tpi];
                 if (tp.time > note.startTime) break;
                 if (tp.uninherited) currentBeatLength = tp.beatLength;
             }
@@ -314,8 +387,8 @@ if (note.type === 'slider') {
                     let tickCanvas = null;
                     if (note.isMissed && hasSliderTickTexture) {
                         tickCanvas = sliderTickImg;
-                    } else if (hasSliderTickTexture) {
-                    tickCanvas = tintedSliderTicks[note.comboColorIndex % tintedSliderTicks.length];
+                    } else if (hasSliderTickTexture && tintedSliderTicks.length > 0) {
+                        tickCanvas = tintedSliderTicks[note.comboColorIndex % tintedSliderTicks.length];
                     }
 
                     if (tickCanvas) {
@@ -338,8 +411,7 @@ if (note.type === 'slider') {
             ctx.fillRect(xStart, Y_CENTERED - SPINNER_BAR_HEIGHT/2, xEnd - xStart, SPINNER_BAR_HEIGHT);
         }
 
-            if (note.type === 'circle' || note.type === 'slider') {
-            // Sliders snake, Circles snap to their hit lane
+        if (note.type === 'circle' || note.type === 'slider') {
             const yPos = note.type === 'slider' 
                 ? getSnakyY(note, note.startTime) 
                 : getHitCircleY(note);
@@ -352,7 +424,7 @@ if (note.type === 'slider') {
     drawKeyHistory(currentTime, pastMs, futureMs, pxPerMs);
     drawKeyBoxes();
 
-    // Playhead
+    // Playhead line
     ctx.strokeStyle = '#0ff'; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.moveTo(playheadX, Y_CENTERED - 45); ctx.lineTo(playheadX, Y_CENTERED + 45); ctx.stroke();
     ctx.fillStyle = '#0ff';
@@ -362,12 +434,12 @@ if (note.type === 'slider') {
     ctx.font = '14px Arial';
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     
-    // ──────── LIVE DEBUG: shows exactly what the code is calculating ────────
-    const debugInfo = `${(currentTime/1000).toFixed(2)}s | Speed: ${currentSpeed.toFixed(2)}x | OD: ${beatmapOD.toFixed(1)} | 50w: ${hitWindow50.toFixed(1)}ms | diam: ${judgmentDiameterPx.toFixed(0)}px | currentLiveTime: ${lastCommonLiveTime.toFixed(0)}ms | preciseWebSocketTime: ${preciseWebSocketTime.toFixed(0)}ms`;
+    // Live debug output
+    const debugInfo = `${(currentTime/1000).toFixed(2)}s | State: ${gameStateName} | Speed: ${currentSpeed.toFixed(2)}x | OD: ${beatmapOD.toFixed(1)} | 50w: ${hitWindow50.toFixed(1)}ms | liveTime: ${lastCommonLiveTime.toFixed(0)}ms | preciseTime: ${lastPreciseTime.toFixed(0)}ms`;
     ctx.fillText(debugInfo, 15, canvas.height - 10);
 
     if (SHOW_DEBUG_PANEL) {
-         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
         ctx.fillRect(canvas.width - 300, 0, 300, canvas.height);
         ctx.fillStyle = 'white';
         ctx.font = '14px Arial';
@@ -376,7 +448,7 @@ if (note.type === 'slider') {
         ctx.fillText(`Game State: ${gameStateName}`, canvas.width - 290, y); y += 20;
         ctx.fillText(`Key States:`, canvas.width - 290, y); y += 20;
         for (const key in keyBoxStates) {
-            ctx.fillText(`${key}: ${keyBoxStates[key] ? 'DOWN' : 'UP'}`, canvas.width - 290, y);
+            ctx.fillText(`${key}: ${keyBoxStates[key] ? 'DOWN' : 'UP'} (count: ${lastCounts[key]})`, canvas.width - 290, y);
             y += 20;
         }
         ctx.fillText(`currentLiveTime: ${lastCommonLiveTime.toFixed(0)}ms`, canvas.width - 290, y); y += 20;

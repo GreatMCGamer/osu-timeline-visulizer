@@ -43,11 +43,37 @@ const KEY_LINE_THICKNESS = 20;
 const KEY_BOX_SIZE = 24;
 const KEY_BOX_Y = 25;         
 const KEY_BOX_SPACING = 60;   
+const MIN_KEY_PRESS_DURATION_MS = 65; // Minimum time duration in ms guaranteed to render
+const MIN_KEY_PRESS_LENGTH_PX = 24;   // Minimum visual line length in pixels regardless of click brevity   
 
 const TITLE_FONT_SIZE = 50;
 
-let wsCommon;
-let wsPrecise;
+// ──────── TOSU CONNECTION CONFIG ────────
+const urlParams = new URLSearchParams(window.location.search);
+const storedHost = (typeof localStorage !== 'undefined') ? localStorage.getItem('osu_tosu_host') : null;
+
+const tosuConfig = {
+    host: urlParams.get('host') || storedHost || '127.0.0.1:24050',
+    isSecure: urlParams.get('secure') === 'true' || urlParams.get('wss') === 'true',
+    isHttps: window.location.protocol === 'https:',
+    hideStatus: urlParams.get('hideStatus') === '1' || urlParams.get('hideStatus') === 'true',
+    startDemo: urlParams.get('demo') === '1' || urlParams.get('demo') === 'true',
+    get wsBase() {
+        return (this.isSecure ? 'wss://' : 'ws://') + this.host;
+    },
+    get httpBase() {
+        return (this.isSecure ? 'https://' : 'http://') + this.host;
+    }
+};
+
+let isTosuConnected = false;
+let isDemoMode = false;
+let tosuConnectionStatus = 'disconnected'; // 'disconnected' | 'connecting' | 'connected' | 'demo'
+let connectionRetryCount = 0;
+let hasLoggedHttpsWarning = false;
+
+let wsCommon = null;
+let wsPrecise = null;
 
 let hitObjects = [];
 let timingPoints = [];
@@ -56,6 +82,7 @@ let beatmapOD = 8.0;
 let beatmapSliderTickRate = 1.0;
 let lastChecksum = '';
 let mapTitle = 'Waiting for map...';
+let titleLines = [];
 
 let sliderTrackOverride = [20, 20, 20];
 let sliderBorder = [255, 255, 255];

@@ -3,9 +3,8 @@
  */
 
 function getSliderTargetY(timestamp, hitTime) {
-    // hitTime is now the *actual* judgment time (note.actualHitTime) once judged,
+    // hitTime is the actual judgment time (note.actualHitTime) once judged,
     // or the nominal startTime for unjudged sliders.
-    // Only keys that started AFTER the slider was actually hit are counted.
     let lane0 = false;
     let lane1 = false;
     
@@ -15,9 +14,10 @@ function getSliderTargetY(timestamp, hitTime) {
     for (let i = 0; i < keyStrokes.length; i++) {
         const s = keyStrokes[i];
         
-        // Filter: Only count keys that started AFTER the slider was hit
-        if (s.startTime < hitTime) continue; 
+        // Filter: Ignore strokes that fully ended before the slider was hit
+        if (s.endTime !== null && s.endTime < hitTime) continue; 
         
+        // Ignore strokes that start after this timestamp point or ended before it
         if (s.startTime > timestamp) continue;
         if (s.endTime !== null && s.endTime < timestamp) continue;
         
@@ -34,7 +34,7 @@ function getSliderTargetY(timestamp, hitTime) {
 
 function getSnakyY(note, targetTime) {
     const laneDist = KEY_BOX_SPACING / 2;
-    const ySpeed = laneDist / 100; 
+    const ySpeed = laneDist / 75; 
     const step = 4; 
 
     // Use the real judgment time once the slider has been hit
@@ -89,29 +89,43 @@ function getSnakyY(note, targetTime) {
 }
 
 function getSliderStyles(trackRgb, borderRgb, isMissed = false) {
-    let [r, g, b] = trackRgb || [255, 255, 255];
-    // Use the provided skin border color, fallback to white if undefined
-    let border = borderRgb || [255, 255, 255]; 
+    let r = 255, g = 255, b = 255;
+    if (trackRgb && trackRgb.length >= 3) {
+        r = trackRgb[0];
+        g = trackRgb[1];
+        b = trackRgb[2];
+    }
+    
+    let br = 255, bg = 255, bb = 255;
+    if (borderRgb && borderRgb.length >= 3) {
+        br = borderRgb[0];
+        bg = borderRgb[1];
+        bb = borderRgb[2];
+    }
     let alpha = 0.85;
     
     if (isMissed) {
         const avg = (r + g + b) / 3;
         r = g = b = avg * 0.5; // Darken
-        border = [100, 100, 100]; // Dim missed border
+        br = 100; bg = 100; bb = 100;
         alpha = 0.35;
     }
 
     // Standard skin logic: slightly brighten the base color for the center glow
-    const highlight = [
-        Math.min(255, r + 90), 
-        Math.min(255, g + 90), 
-        Math.min(255, b + 90)
-    ];
+    const hr = Math.min(255, r + 90);
+    const hg = Math.min(255, g + 90);
+    const hb = Math.min(255, b + 90);
 
     return {
-        border: `rgb(${border.join(',')})`,
+        border: `rgb(${br},${bg},${bb})`,
         trackBaseRgb: `${r},${g},${b}`,
-        trackHighlightRgb: `${highlight.join(',')}`,
+        trackHighlightRgb: `${hr},${hg},${hb}`,
+        baseR: r,
+        baseG: g,
+        baseB: b,
+        highR: hr,
+        highG: hg,
+        highB: hb,
         alpha: alpha
     };
 }

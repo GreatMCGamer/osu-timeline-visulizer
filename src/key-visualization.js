@@ -10,29 +10,39 @@ function drawKeyHistory(currentTime, pastMs, futureMs, pxPerMs) {
     const gap = 4;
     const radius = KEY_LINE_THICKNESS / 2;
     const maxLineX = playheadX - gap - radius; 
+    const minVisualLen = Math.max(MIN_KEY_PRESS_LENGTH_PX, MIN_KEY_PRESS_DURATION_MS * pxPerMs);
 
-    for (let stroke of keyStrokes) {
-        let sTime = stroke.startTime || currentTime;
-        let eTime = stroke.endTime !== null ? stroke.endTime : currentTime;
+    for (let i = 0; i < keyStrokes.length; i++) {
+        const stroke = keyStrokes[i];
+        let sTime = (stroke.startTime !== undefined && stroke.startTime !== null) ? stroke.startTime : currentTime;
+        let eTime = (stroke.endTime !== undefined && stroke.endTime !== null) ? stroke.endTime : currentTime;
         
-        // Culling: Don't draw if off-screen
-        if (eTime < currentTime - pastMs) continue;
-        if (sTime > currentTime + futureMs) continue;
+        // Skip keys that have not occurred yet
+        if (sTime > currentTime) continue;
 
-        let xStart = playheadX + (sTime - currentTime) * pxPerMs;
-        let xEnd = playheadX + (eTime - currentTime) * pxPerMs;
+        // Active key trail cannot extend into the future beyond playhead
+        let effectiveETime = Math.min(eTime, currentTime);
+
+        // Culling: Don't draw if off-screen to the left (past)
+        if (Math.max(eTime, sTime + MIN_KEY_PRESS_DURATION_MS) < currentTime - pastMs) continue;
+
+        let rawXStart = playheadX + (sTime - currentTime) * pxPerMs;
+        let rawXEnd = playheadX + (effectiveETime - currentTime) * pxPerMs;
+
+        // Guarantee a minimum visual press length regardless of how short the click was
+        if (rawXEnd - rawXStart < minVisualLen) {
+            rawXStart = rawXEnd - minVisualLen;
+        }
+
+        // Clamp to playhead so lines connect cleanly to key hitboxes
+        let drawXEnd = Math.min(rawXEnd, maxLineX);
+        let drawXStart = Math.min(rawXStart, drawXEnd - minVisualLen);
 
         // Determine lane (K1/M1 = top, K2/M2 = bottom)
         let lane = (stroke.key === 'k1' || stroke.key === 'm1') ? 0 : 1;
         let y = Y_CENTERED - (KEY_BOX_SPACING / 2) + (lane * KEY_BOX_SPACING);
 
-        // Clamp drawing to the playhead
-        let drawXStart = Math.min(xStart, maxLineX);
-        let drawXEnd = Math.min(xEnd, maxLineX);
-
-        if (drawXStart >= drawXEnd) drawXStart = drawXEnd - 0.1; 
-
-        ctx.strokeStyle = lane === 0 ? 'rgba(255, 105, 180, 0.8)' : 'rgba(0, 255, 255, 0.8)';
+        ctx.strokeStyle = lane === 0 ? 'rgba(255, 105, 180, 0.85)' : 'rgba(0, 255, 255, 0.85)';
         ctx.beginPath(); 
         ctx.moveTo(drawXStart, y); 
         ctx.lineTo(drawXEnd, y); 

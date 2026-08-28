@@ -63,7 +63,8 @@ function updateComboColors() {
 // This is the correct way to get Combo1/Combo2/... and also SliderBorder/SliderTrackOverride.
 async function loadSkinIniColors() {
     const cacheBustStr = `?v=${Date.now()}`;
-    const tosuUrl = 'http://127.0.0.1:24050/files/skin/';
+    const tosuBase = (typeof tosuConfig !== 'undefined' && tosuConfig.httpBase) ? tosuConfig.httpBase : 'http://127.0.0.1:24050';
+    const tosuUrl = `${tosuBase}/files/skin/`;
 
     try {
         const response = await fetch(tosuUrl + 'skin.ini' + cacheBustStr);
@@ -168,7 +169,8 @@ function loadTextures() {
         isNewBeatmap = false;
     }
 
-    const tosuUrl = 'http://127.0.0.1:24050/files/skin/';
+    const tosuBase = (typeof tosuConfig !== 'undefined' && tosuConfig.httpBase) ? tosuConfig.httpBase : 'http://127.0.0.1:24050';
+    const tosuUrl = `${tosuBase}/files/skin/`;
     
     // Helper function to load an image with fallback support safely
     function loadImageWithFallback(image, src, fallbackSrc) {

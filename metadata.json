@@ -1,0 +1,8 @@
+{
+  "name": "osu! Live Note Timeline",
+  "description": "A real-time visualization of osu! beatmaps that displays hit objects, key presses, and timing information for OBS.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
