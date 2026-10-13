@@ -249,7 +249,7 @@ function draw() {
 
     // Miss detection for unjudged hit objects (only during active song playback, NEVER while paused)
     const isPlayingState = isPlay && !isPause;
-    if (isPlayingState) {
+    if (isPlayingState && lastCombo === 0) {
         for (let i = 0; i < hitObjects.length; i++) {
             const note = hitObjects[i];
             if (!note.judged) {
@@ -423,7 +423,7 @@ function draw() {
     const safe50w = (typeof hitWindow50 === 'number' && !isNaN(hitWindow50)) ? hitWindow50 : 119.5;
     const safeLiveTime = (typeof lastCommonLiveTime === 'number' && !isNaN(lastCommonLiveTime)) ? lastCommonLiveTime : 0;
     
-    const debugInfo = `${(safeTime/1000).toFixed(2)}s | State: ${gameStateName || 'unknown'} | OD: ${safeOD.toFixed(1)} | 50w: ${safe50w.toFixed(1)}ms | liveTime: ${safeLiveTime.toFixed(0)}ms`;
+    const debugInfo = `${(safeTime/1000).toFixed(2)}s | State: ${gameStateName || 'unknown'} | OD: ${safeOD.toFixed(1)} | 50w: ${safe50w.toFixed(1)}ms | liveTime: ${safeLiveTime.toFixed(0)}ms | drift: ${((typeof hitErrorDriftSamples !== 'undefined' && hitErrorDriftSamples.length) ? (hitErrorDriftSamples.reduce((a,b)=>a+b,0)/hitErrorDriftSamples.length).toFixed(1) : '0.0')}ms (${(typeof hitErrorDriftSamples !== 'undefined' ? hitErrorDriftSamples.length : 0)}/10)`;
     ctx.fillText(debugInfo, 15, canvas.height - 10);
 
     if (SHOW_DEBUG_PANEL) {

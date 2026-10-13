@@ -140,3 +140,4 @@ const DEFAULT_COMBO_COLORS = [
 
 let lastCombo = 0;
 let ourDetectedMissCount = 0;
+let hitErrorDriftSamples = []; // rolling window of |estNoteStart - note.startTime| for accuracy debug

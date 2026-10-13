@@ -105,6 +105,29 @@ function handleSocketFailure() {
     scheduleReconnect();
 }
 
+// ──────── UNIVERSAL MISS GATE (combo-drop) ────────
+// When the combo drops, the game just registered a miss. Flag the earliest
+// unjudged note whose hit window has already passed as missed. This is the
+// authoritative miss signal (combo clearly cut) and covers ALL object types,
+// not just sliders.
+function markMissedObjectsOnComboDrop() {
+    const now = lastCommonLiveTime || 0;
+    for (let i = 0; i < hitObjects.length; i++) {
+        const note = hitObjects[i];
+        if (note.judged) continue;
+        const tooLateTime = note.endTime + hitWindow50;
+        if (now > tooLateTime) {
+            note.judged = true;
+            if (!note.isMissed) {
+                note.isMissed = true;
+                note.missedAt = tooLateTime;
+                ourDetectedMissCount++;
+            }
+            break; // one miss per combo drop
+        }
+    }
+}
+
 function processKeyAndHitData(keysData, hitErrorsData, liveTime) {
     if (keysData) {
         const keyNames = ['k1', 'k2', 'm1', 'm2'];
@@ -195,6 +218,43 @@ function processKeyAndHitData(keysData, hitErrorsData, liveTime) {
             lastCounts[k] = kCount;
             keyBoxStates[k] = isDown;
         }
+    }
+
+    // ──────── HIT-ERROR-BASED HIT DETECTION (independent of key presses) ────────
+    // For every NEW hit error, estimate the note's start time from this packet's
+    // arrival time (liveTime) and the error offset, then mark the nearest unjudged
+    // note as judged. This closes the "hit error consumed but unmatched" hole that
+    // caused false misses when the key press and hit error arrived in separate packets.
+    if (hitErrorsData && hitErrorsData.length > hitErrorCount) {
+        const newErrors = hitErrorsData.slice(hitErrorCount);
+        for (let e = 0; e < newErrors.length; e++) {
+            const error = newErrors[e];
+            const estNoteStart = liveTime - error;
+            let bestObj = null;
+            let minDiff = Infinity;
+            const searchTolerance = Math.max(150, (typeof hitWindow50 !== 'undefined' ? hitWindow50 : 150) + 50);
+            for (let j = 0; j < hitObjects.length; j++) {
+                const obj = hitObjects[j];
+                if (obj.judged) continue;
+                const diff = Math.abs(obj.startTime - estNoteStart);
+                if (diff < searchTolerance && diff < minDiff) {
+                    minDiff = diff;
+                    bestObj = obj;
+                }
+            }
+            if (bestObj) {
+                bestObj.judged = true;
+                bestObj.isMissed = false;
+                if (typeof bestObj.actualHitTime === 'undefined') {
+                    bestObj.actualHitTime = bestObj.startTime + error;
+                }
+                // Accuracy benchmark: how far our estimate drifted from the note's
+                // beatmap timing (error already accounted for).
+                hitErrorDriftSamples.push(minDiff);
+                if (hitErrorDriftSamples.length > 10) hitErrorDriftSamples.shift();
+            }
+        }
+        hitErrorCount = hitErrorsData.length;
     }
 
     if (hitErrorsData) {
@@ -303,11 +363,10 @@ function parseWebsocketPayload(data) {
 
     if (currentCombo !== null) {
         if (currentCombo < lastCombo && lastCombo > 0) {
-            const hits = data.gameplay?.hits || data.play?.hits;
-            const gameMisses = (hits && typeof hits["0"] === 'number') ? hits["0"] : 0;
-            if (gameMisses === ourDetectedMissCount) {
-                markSliderAsMissed();
-            }
+            // Combo dropped → the game just registered a miss. Flag the earliest
+            // unjudged note whose window has passed (universal miss gate — all
+            // object types, not just sliders).
+            markMissedObjectsOnComboDrop();
         }
         lastCombo = currentCombo;
     }
@@ -445,6 +504,7 @@ function resetTimelineState() {
     commonPacketsSinceAdvance = 0;
     currentSpeed = 1.0;
     ourDetectedMissCount = 0;
+    hitErrorDriftSamples = [];
     lastCombo = 0;
     
     keyStrokes = [];
