@@ -1,13 +1,13 @@
-// ──────── DRAWING FUNCTIONS ────────
+﻿// â”€â”€â”€â”€â”€â”€â”€â”€ DRAWING FUNCTIONS â”€â”€â”€â”€â”€â”€â”€â”€
 // Fully scale-aware rendering (pxPerMs = scale).
-// OD ≤ 0 (including Half-Time edge cases) now correctly gives LARGER windows.
+// OD â‰¤ 0 (including Half-Time edge cases) now correctly gives LARGER windows.
 
 function drawHitCircle(posX, colorIndex, isMissed = false, diameter = 20, yOffset = 0) {
     if (posX < -100 || posX > canvas.width + 100) return;
     
     ctx.globalAlpha = isMissed ? 0.4 : 1.0;
 
-    // ──────── NEW: ONLY use the pre-combined image (no separate overlay draw) ────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€ NEW: ONLY use the pre-combined image (no separate overlay draw) â”€â”€â”€â”€â”€â”€â”€â”€
     if (hasHitCircleTexture) {
         let toDraw = null;
 
@@ -39,22 +39,6 @@ function drawHitCircle(posX, colorIndex, isMissed = false, diameter = 20, yOffse
         ctx.beginPath(); 
         ctx.arc(posX, Y_CENTERED + yOffset, diameter / 2, 0, Math.PI*2); 
         ctx.fill();
-    }
-
-    // Prominent osu! Red "X" cross for missed hit circles
-    if (isMissed) {
-        ctx.globalAlpha = 0.95;
-        ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = Math.max(2.5, diameter * 0.14);
-        ctx.lineCap = 'round';
-        const crossArm = diameter * 0.28;
-        const cy = Y_CENTERED + yOffset;
-        ctx.beginPath();
-        ctx.moveTo(posX - crossArm, cy - crossArm);
-        ctx.lineTo(posX + crossArm, cy + crossArm);
-        ctx.moveTo(posX + crossArm, cy - crossArm);
-        ctx.lineTo(posX - crossArm, cy + crossArm);
-        ctx.stroke();
     }
 
     ctx.globalAlpha = 1.0;
@@ -116,7 +100,7 @@ function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiam
         ? judgmentDiameterPx * 0.92 
         : 35;
 
-    // ──────── BUILD SNAKY PATH ────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€ BUILD SNAKY PATH â”€â”€â”€â”€â”€â”€â”€â”€
     const path = new Path2D();
     const step = 4;
     path.moveTo(xStart, getSnakyY(note, note.startTime, currentTime));
@@ -125,7 +109,7 @@ function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiam
     }
     path.lineTo(xEnd, getSnakyY(note, note.endTime, currentTime));
 
-    // ──────── SCRATCH CANVAS SETUP (unchanged) ────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€ SCRATCH CANVAS SETUP (unchanged) â”€â”€â”€â”€â”€â”€â”€â”€
     if (!window.sliderScratch) {
         window.sliderScratch = document.createElement('canvas');
         window.sliderCtx = window.sliderScratch.getContext('2d');
@@ -142,7 +126,7 @@ function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiam
 
     const bodyWidth = trackDiam * 0.82;   // main track body width (inside border)
 
-    // 1. Outer border (always solid — works with or without texture)
+    // 1. Outer border (always solid â€” works with or without texture)
     sCtx.lineWidth = trackDiam;
     sCtx.strokeStyle = styles.border;
     sCtx.stroke(path);
@@ -155,7 +139,7 @@ function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiam
         : null;
 
     if (hasSliderBodyTexture && tintedBodyCanvas) {
-        // ──────── TEXTURE MODE (authentic osu! sliderbody) ────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€ TEXTURE MODE (authentic osu! sliderbody) â”€â”€â”€â”€â”€â”€â”€â”€
         const pattern = sCtx.createPattern(tintedBodyCanvas, 'repeat');
         if (pattern) {
             sCtx.lineWidth = bodyWidth;
@@ -163,7 +147,7 @@ function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiam
             sCtx.stroke(path);
         }
     } else {
-        // ──────── LAYERED GRADIENT FALLBACK (your tuned 4-layer version) ────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€ LAYERED GRADIENT FALLBACK (your tuned 4-layer version) â”€â”€â”€â”€â”€â”€â”€â”€
         // Solid base track body
         sCtx.lineWidth = bodyWidth;
         sCtx.strokeStyle = `rgb(${styles.trackBaseRgb})`;
@@ -192,7 +176,7 @@ function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiam
         sCtx.globalAlpha = 1.0;
     }
 
-    // ──────── RENDER TO MAIN CANVAS ────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€ RENDER TO MAIN CANVAS â”€â”€â”€â”€â”€â”€â”€â”€
     ctx.globalAlpha = styles.alpha;
     ctx.drawImage(sCanvas, 0, 0);
     ctx.globalAlpha = 1.0;
@@ -205,10 +189,10 @@ function draw() {
     const state = (gameStateName || '').toLowerCase();
     const isPlay = (state === 'play' || state === 'playing');
     const isPause = (state === 'pause' || state === 'paused');
-    const isTimelineVisible = isPlay || isPause;
+    const isInGameplay = isPlay || isPause;
 
-    // Timeline is hidden during Song Select, Menus, Results, etc.
-    if (!isTimelineVisible) {
+    // Timeline is hidden only outside gameplay (Song Select, Menus, Results) — reliably detected by game state.
+    if (!isInGameplay) {
         if (SHOW_DEBUG_PANEL) {
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(canvas.width - 300, 0, 300, canvas.height);
@@ -228,10 +212,13 @@ function draw() {
         currentSpeed = 1.0;
     }
 
+    // Time-freeze pause detection: freeze when the same map time is reported for 2 consecutive common packets.
+    const isTimeFrozen = commonPacketsSinceAdvance >= 2;
+
     // Calculate current live timeline position
     let currentTime = 0;
-    if (isPause) {
-        // While paused, lock strictly to the exact paused position reported by tosu
+    if (isTimeFrozen) {
+        // Paused: lock strictly to the exact frozen position reported by tosu (no extrapolation → no jerking).
         currentTime = lastCommonLiveTime || 0;
     } else if (lastCommonLiveTime > 0) {
         // Smooth interpolation from websocket liveTime
@@ -251,7 +238,7 @@ function draw() {
         keyStrokes.shift();
     }
 
-    // ──────── HIT WINDOWS — fully unclamped for OD ≤ 0 ────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€ HIT WINDOWS â€” fully unclamped for OD â‰¤ 0 â”€â”€â”€â”€â”€â”€â”€â”€
     const currentOD = (typeof beatmapOD === 'number' && !isNaN(beatmapOD)) ? beatmapOD : 8.0;
     hitWindow50  = 199.5 - (currentOD * 10);
     hitWindow100 = 139.5 - (currentOD * 8);
@@ -453,6 +440,7 @@ function draw() {
             y += 20;
         }
         ctx.fillText(`liveTime: ${safeLiveTime.toFixed(0)}ms`, canvas.width - 290, y); y += 20;
+        ctx.fillText(`Frozen: ${commonPacketsSinceAdvance >= 2 ? 'YES' : 'no'} (packets: ${commonPacketsSinceAdvance})`, canvas.width - 290, y); y += 20;
     }
 
     requestAnimationFrame(draw);

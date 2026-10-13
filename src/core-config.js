@@ -97,6 +97,7 @@ let hitErrorCount = 0;
 let lastCommonLiveTime = 0;
 let lastCommonRealTime = 0;
 let currentSpeed = 1.0;
+let commonPacketsSinceAdvance = 0; // count of common packets since map time last advanced (pause detection)
 
 let keyStrokes = [];
 let activeStrokes = { k1: null, k2: null, m1: null, m2: null };

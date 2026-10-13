@@ -173,13 +173,14 @@ function loadTextures() {
     const tosuUrl = `${tosuBase}/files/skin/`;
     
     // Helper function to load an image with fallback support safely
-    function loadImageWithFallback(image, src, fallbackSrc) {
+    function loadImageWithFallback(image, src, fallbackSrc, localSrc) {
         let triedFallback = false;
+        let triedLocal = false;
         let isUpscaled = false;
 
         image.onload = () => { 
             // If we loaded a normal (non-@2x) texture, upscale it to 2x resolution
-            if (triedFallback && !isUpscaled) {
+            if (triedFallback && !triedLocal && !isUpscaled) {
                 isUpscaled = true;
                 upscaleTextureTo2x(image);
                 return; 
@@ -197,6 +198,10 @@ function loadTextures() {
             if (!triedFallback) {
                 triedFallback = true;
                 image.src = fallbackSrc;
+            } else if (!triedLocal && localSrc) {
+                triedLocal = true;
+                image.crossOrigin = null;
+                image.src = localSrc;
             } else {
                 image.onerror = null;
             }
@@ -230,11 +235,14 @@ function loadTextures() {
     sliderBodyImg = new Image();
     sliderBodyImg.crossOrigin = "Anonymous";
     
-    // Try @2x first, then fallback to normal
+    // Try tosu @2x first, then tosu normal, then the local default_skin/ folder (tier 3).
+    // Local paths are relative to the page and kept clean (no ?v= cache-bust, which breaks file://).
+    // NOTE: slider body has NO local track texture (default_skin/sliderb0 is the slider BALL, not the
+    // track), so it stays tosu-only and falls back to the hard-coded gradient+border rendering.
     loadImageWithFallback(sliderBodyImg, tosuUrl + 'sliderbody@2x.png' + cacheBustStr, tosuUrl + 'sliderbody.png' + cacheBustStr);
-    loadImageWithFallback(hitCircleImg, tosuUrl + 'hitcircle@2x.png' + cacheBustStr, tosuUrl + 'hitcircle.png' + cacheBustStr);
-    loadImageWithFallback(hitCircleOverlayImg, tosuUrl + 'hitcircleoverlay@2x.png' + cacheBustStr, tosuUrl + 'hitcircleoverlay.png' + cacheBustStr);
-    loadImageWithFallback(sliderTickImg, tosuUrl + 'sliderscorepoint@2x.png' + cacheBustStr, tosuUrl + 'sliderscorepoint.png' + cacheBustStr);
+    loadImageWithFallback(hitCircleImg, tosuUrl + 'hitcircle@2x.png' + cacheBustStr, tosuUrl + 'hitcircle.png' + cacheBustStr, 'default_skin/hitcircle@2x.png');
+    loadImageWithFallback(hitCircleOverlayImg, tosuUrl + 'hitcircleoverlay@2x.png' + cacheBustStr, tosuUrl + 'hitcircleoverlay.png' + cacheBustStr, 'default_skin/hitcircleoverlay@2x.png');
+    loadImageWithFallback(sliderTickImg, tosuUrl + 'sliderscorepoint@2x.png' + cacheBustStr, tosuUrl + 'sliderscorepoint.png' + cacheBustStr, 'default_skin/sliderscorepoint@2x.png');
 }
 
 function createTintedVersions() {

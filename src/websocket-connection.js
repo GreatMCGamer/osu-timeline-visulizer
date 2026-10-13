@@ -287,6 +287,9 @@ function parseWebsocketPayload(data) {
             dtTosu = commonLiveTime - lastCommonLiveTime;
             if (dtTosu < -500) { resetTimelineState(); }
         }
+        if (commonLiveTime > lastCommonLiveTime) {
+            commonPacketsSinceAdvance = 0; // map time advanced — not paused
+        }
         lastCommonLiveTime = commonLiveTime;
         lastCommonRealTime = now;
     }
@@ -371,6 +374,7 @@ function connect(isManual = false) {
 
         wsCommon.onmessage = (e) => {
             try {
+                commonPacketsSinceAdvance++; // count common packets; reset to 0 when time advances
                 const data = JSON.parse(e.data);
                 parseWebsocketPayload(data);
             } catch (err) {}
@@ -438,6 +442,7 @@ window.retryTosuConnection = function() {
 function resetTimelineState() { 
     hitErrorCount = 0; 
     lastCommonLiveTime = 0;
+    commonPacketsSinceAdvance = 0;
     currentSpeed = 1.0;
     ourDetectedMissCount = 0;
     lastCombo = 0;
