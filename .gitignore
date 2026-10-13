@@ -1,0 +1,2 @@
+# Ignore all content inside the default_skin folder (local skin assets, not tracked)
+default_skin/*
