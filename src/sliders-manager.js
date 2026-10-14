@@ -17,6 +17,11 @@ function getSliderTargetY(timestamp, hitTime, currentTime) {
     for (let i = 0; i < keyStrokes.length; i++) {
         const s = keyStrokes[i];
         
+        // T6 FIX: ignore keys that started BEFORE the head was hit (already held
+        // down). Only the head-hitting key (startTime == hitTime) and keys pressed
+        // after the hit influence the body.
+        if (s.startTime < hitTime) continue;
+
         // Filter: Ignore strokes that fully ended before the slider was hit
         if (s.endTime !== null && s.endTime < hitTime) continue; 
         

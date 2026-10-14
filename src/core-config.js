@@ -141,3 +141,4 @@ const DEFAULT_COMBO_COLORS = [
 let lastCombo = 0;
 let ourDetectedMissCount = 0;
 let hitErrorDriftSamples = []; // rolling window of |estNoteStart - note.startTime| for accuracy debug
+let lastGameMissCount = 0; // last seen game miss count (hits["0"]) from the common packet — drives consecutive-miss detection

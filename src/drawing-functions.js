@@ -253,7 +253,7 @@ function draw() {
         for (let i = 0; i < hitObjects.length; i++) {
             const note = hitObjects[i];
             if (!note.judged) {
-                const tooLateTime = note.endTime + hitWindow50;
+                const tooLateTime = note.startTime + hitWindow50;
                 if (currentTime > tooLateTime + tosuLeeway) {
                     note.judged = true;
                     if (!note.isMissed) {

@@ -110,20 +110,26 @@ function handleSocketFailure() {
 // unjudged note whose hit window has already passed as missed. This is the
 // authoritative miss signal (combo clearly cut) and covers ALL object types,
 // not just sliders.
-function markMissedObjectsOnComboDrop() {
+// ──────── UNIVERSAL MISS GATE (miss-count / combo-drop) ────────
+// When the game registers a miss — the common packet's miss counter (hits["0"])
+// increments, or the combo drops — flag the earliest unjudged note whose HEAD hit
+// window has already passed as missed. `count` = how many notes to mark (N for N
+// consecutive misses from hits["0"]; 1 for a combo break / slider break). Uses
+// startTime (not endTime) so sliders/spinners are marked at the true miss time,
+// not `duration` ms late.
+function markMissedNotes(count) {
     const now = lastCommonLiveTime || 0;
-    for (let i = 0; i < hitObjects.length; i++) {
+    let marked = 0;
+    for (let i = 0; i < hitObjects.length && marked < count; i++) {
         const note = hitObjects[i];
         if (note.judged) continue;
-        const tooLateTime = note.endTime + hitWindow50;
+        const tooLateTime = note.startTime + hitWindow50;
         if (now > tooLateTime) {
             note.judged = true;
-            if (!note.isMissed) {
-                note.isMissed = true;
-                note.missedAt = tooLateTime;
-                ourDetectedMissCount++;
-            }
-            break; // one miss per combo drop
+            note.isMissed = true;
+            note.missedAt = tooLateTime;
+            ourDetectedMissCount++;
+            marked++;
         }
     }
 }
@@ -248,6 +254,30 @@ function processKeyAndHitData(keysData, hitErrorsData, liveTime) {
                 if (typeof bestObj.actualHitTime === 'undefined') {
                     bestObj.actualHitTime = bestObj.startTime + error;
                 }
+                // T6 FIX: cross-packet case - the key press and hit error arrived in
+                // separate packets, so the immediate-matching path never set a lane.
+                // Assign hitLane from the key stroke closest to the hit time. Prefer
+                // a stroke not already matched to another note, so a key that hit a
+                // previous note does not set this lane.
+                if (typeof bestObj.hitLane === 'undefined' || bestObj.hitLane === -1) {
+                    let bestStroke = null, minStrokeDiff = Infinity;
+                    let altStroke = null, altDiff = Infinity;
+                    for (let si = 0; si < keyStrokes.length; si++) {
+                        const st = keyStrokes[si];
+                        const sd = Math.abs(st.startTime - bestObj.actualHitTime);
+                        if (st.matched) {
+                            if (sd < altDiff) { altDiff = sd; altStroke = st; }
+                        } else if (sd < minStrokeDiff) {
+                            minStrokeDiff = sd; bestStroke = st;
+                        }
+                    }
+                    if (!bestStroke) { bestStroke = altStroke; minStrokeDiff = altDiff; }
+                    if (bestStroke && minStrokeDiff < searchTolerance) {
+                        bestObj.hitLane = (bestStroke.key === 'k1' || bestStroke.key === 'm1') ? 0 : 1;
+                        bestStroke.startTime = bestObj.actualHitTime;
+                        bestStroke.matched = true;
+                    }
+                }
                 // Accuracy benchmark: how far our estimate drifted from the note's
                 // beatmap timing (error already accounted for).
                 hitErrorDriftSamples.push(minDiff);
@@ -362,11 +392,26 @@ function parseWebsocketPayload(data) {
         : null;
 
     if (currentCombo !== null) {
-        if (currentCombo < lastCombo && lastCombo > 0) {
-            // Combo dropped → the game just registered a miss. Flag the earliest
-            // unjudged note whose window has passed (universal miss gate — all
-            // object types, not just sliders).
-            markMissedObjectsOnComboDrop();
+        // PRIMARY: the common packet's miss counter (hits["0"]) is the authoritative
+        // count of misses. When it increments by N, the player just missed N notes in
+        // a row (no successful hit errors in between) → mark N notes missed now.
+        const gameMissCount = (data.gameplay && data.gameplay.hits && typeof data.gameplay.hits["0"] === 'number')
+            ? data.gameplay.hits["0"]
+            : (data.play && data.play.hits && typeof data.play.hits["0"] === 'number')
+            ? data.play.hits["0"]
+            : null;
+        let missCountDelta = 0;
+        if (gameMissCount !== null) {
+            if (gameMissCount > lastGameMissCount) {
+                missCountDelta = gameMissCount - lastGameMissCount;
+                markMissedNotes(missCountDelta);
+            }
+            lastGameMissCount = gameMissCount;
+        }
+        // FALLBACK: a combo drop NOT explained by a miss-count increment (e.g. a slider
+        // break, which cuts the combo but is not a "miss" in hits["0"]) → mark 1 note.
+        if (currentCombo < lastCombo && lastCombo > 0 && missCountDelta === 0) {
+            markMissedNotes(1);
         }
         lastCombo = currentCombo;
     }
@@ -506,6 +551,7 @@ function resetTimelineState() {
     ourDetectedMissCount = 0;
     hitErrorDriftSamples = [];
     lastCombo = 0;
+    lastGameMissCount = 0;
     
     keyStrokes = [];
     activeStrokes = { k1: null, k2: null, m1: null, m2: null };
