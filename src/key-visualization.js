@@ -42,7 +42,14 @@ function drawKeyHistory(currentTime, pastMs, futureMs, pxPerMs) {
         let lane = (stroke.key === 'k1' || stroke.key === 'm1') ? 0 : 1;
         let y = Y_CENTERED - (KEY_BOX_SPACING / 2) + (lane * KEY_BOX_SPACING);
 
-        ctx.strokeStyle = lane === 0 ? 'rgba(255, 105, 180, 0.85)' : 'rgba(0, 255, 255, 0.85)';
+        // T7 DEBUG: alternate shade per press (pink/dark-pink, light-blue/dark-blue).
+        // Gated by SHOW_T7_DEBUG — when off, fall back to the original single color per lane.
+        const isDark = (stroke.pressSeq % 2 === 1);
+        ctx.strokeStyle = (typeof SHOW_T7_DEBUG !== 'undefined' && SHOW_T7_DEBUG)
+            ? (lane === 0
+                ? (isDark ? 'rgba(200, 40, 120, 0.95)' : 'rgba(255, 105, 180, 0.85)')
+                : (isDark ? 'rgba(0, 150, 170, 0.95)' : 'rgba(0, 255, 255, 0.85)'))
+            : (lane === 0 ? 'rgba(255, 105, 180, 0.85)' : 'rgba(0, 255, 255, 0.85)');
         ctx.beginPath(); 
         ctx.moveTo(drawXStart, y); 
         ctx.lineTo(drawXEnd, y); 
@@ -53,12 +60,23 @@ function drawKeyHistory(currentTime, pastMs, futureMs, pxPerMs) {
 /**
  * Draws the interactive hit boxes at the playhead position.
  */
-function drawKeyBoxes() {
+function drawKeyBoxes(liveTimeNow) {
+    // T18: the key boxes are part of the DELAYED render (RENDER_DELAY_MS in draw()).
+    // A press reveals only when it has crossed the (delayed) playhead in REAL time —
+    // reading keyBoxStates directly would light the box ~200ms early.
+    const _lt = (typeof liveTimeNow === 'number') ? liveTimeNow : (lastCommonLiveTime || 0);
+    const _box = { k1: false, k2: false, m1: false, m2: false };
+    for (let i = 0; i < keyStrokes.length; i++) {
+        const st = keyStrokes[i];
+        const sTime = (st.startTime !== undefined && st.startTime !== null) ? st.startTime : 0;
+        const eTime = (st.endTime !== undefined && st.endTime !== null) ? st.endTime : 0;
+        if (sTime <= _lt && (eTime === 0 || eTime >= _lt)) _box[st.key] = true;
+    }
     for (let lane = 0; lane < 2; lane++) {
         let isDown = false;
         // Check states for Lane 0 (K1/M1) and Lane 1 (K2/M2)
-        if (lane === 0 && (keyBoxStates['k1'] || keyBoxStates['m1'])) isDown = true;
-        if (lane === 1 && (keyBoxStates['k2'] || keyBoxStates['m2'])) isDown = true;
+        if (lane === 0 && (_box['k1'] || _box['m1'])) isDown = true;
+        if (lane === 1 && (_box['k2'] || _box['m2'])) isDown = true;
 
         let y = Y_CENTERED - (KEY_BOX_SPACING / 2) + (lane * KEY_BOX_SPACING);
         let size = KEY_BOX_SIZE;

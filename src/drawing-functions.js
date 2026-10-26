@@ -83,7 +83,10 @@ var SLIDER_GRADIENT_LAYERS = window.SLIDER_GRADIENT_LAYERS || [
 ];
 window.SLIDER_GRADIENT_LAYERS = SLIDER_GRADIENT_LAYERS;
 
-function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiameterPx) {
+function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiameterPx, visMissed) {
+    // T18: visMissed = the REVEALED miss state (gated on crossing the delayed
+    // playhead in draw()); undefined → fall back to the note's real state.
+    const _im = (typeof visMissed === 'boolean') ? visMissed : note.isMissed;
     const col = comboColors[note.comboColorIndex % comboColors.length];
     
     const trackColor = (typeof sliderTrackOverride !== 'undefined' && sliderTrackOverride) 
@@ -94,20 +97,29 @@ function drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiam
         ? sliderBorder 
         : [255, 255, 255];
         
-    const styles = getSliderStyles(trackColor, borderColor, note.isMissed);
+    // T22: a broken slider (head hit + body break) grays the WHOLE track (head
+    // included) via the base pass; the head keeps its lane and the body still snakes.
+    // A whole-missed slider also uses the gray base pass.
+    const styles = getSliderStyles(trackColor, borderColor, (note.responsibleBreak || _im)); // T22: a broken slider grays the WHOLE track (head included); the head keeps its lane and the body still snakes
     
     const trackDiam = (judgmentDiameterPx && judgmentDiameterPx > 0) 
         ? judgmentDiameterPx * 0.92 
         : 35;
 
     // â”€â”€â”€â”€â”€â”€â”€â”€ BUILD SNAKY PATH â”€â”€â”€â”€â”€â”€â”€â”€
-    const path = new Path2D();
-    const step = 4;
-    path.moveTo(xStart, getSnakyY(note, note.startTime, currentTime));
-    for (let t = note.startTime + step; t <= note.endTime; t += step) {
-        path.lineTo(playheadX + (t - currentTime) * pxPerMs, getSnakyY(note, t, currentTime));
-    }
-    path.lineTo(xEnd, getSnakyY(note, note.endTime, currentTime));
+    // T22: a broken slider grays the WHOLE track (head included) via the base pass —
+    // no more head/tail split. The head keeps its lane and the body still snakes.
+    const buildPath = (t0, t1) => {
+        const p = new Path2D();
+        const step = 4;
+        p.moveTo(playheadX + (t0 - currentTime) * pxPerMs, getSnakyY(note, t0, currentTime));
+        for (let t = t0 + step; t <= t1; t += step) {
+            p.lineTo(playheadX + (t - currentTime) * pxPerMs, getSnakyY(note, t, currentTime));
+        }
+        p.lineTo(playheadX + (t1 - currentTime) * pxPerMs, getSnakyY(note, t1, currentTime));
+        return p;
+    };
+    const path = buildPath(note.startTime, note.endTime);
 
     // â”€â”€â”€â”€â”€â”€â”€â”€ SCRATCH CANVAS SETUP (unchanged) â”€â”€â”€â”€â”€â”€â”€â”€
     if (!window.sliderScratch) {
@@ -216,18 +228,25 @@ function draw() {
     const isTimeFrozen = commonPacketsSinceAdvance >= 2;
 
     // Calculate current live timeline position
-    let currentTime = 0;
+    let liveTimeNow = 0;
     if (isTimeFrozen) {
         // Paused: lock strictly to the exact frozen position reported by tosu (no extrapolation → no jerking).
-        currentTime = lastCommonLiveTime || 0;
+        liveTimeNow = lastCommonLiveTime || 0;
     } else if (lastCommonLiveTime > 0) {
         // Smooth interpolation from websocket liveTime
         const dt = (now - lastCommonRealTime) * currentSpeed;
         const clampedDt = Math.min(Math.max(0, dt), 1000);
-        currentTime = lastCommonLiveTime + clampedDt;
+        liveTimeNow = lastCommonLiveTime + clampedDt;
     } else {
-        currentTime = 0;
+        liveTimeNow = 0;
     }
+
+    // T17: render 200ms (2 common packets) BEHIND live time — anti-flicker.
+    // Everything behind the playhead has settled: hit errors from both streams,
+    // miss/break events and their note assignment are final. Only genuine
+    // skip/not-hit misses can still arrive into the rendered region.
+    const RENDER_DELAY_MS = 200;
+    const currentTime = Math.max(0, liveTimeNow - RENDER_DELAY_MS);
 
     const pxPerMs = scale;
     const pastMs = playheadX / scale + 200;
@@ -247,24 +266,9 @@ function draw() {
     const tosuLeeway = 350; 
     const judgmentDiameterPx = Math.max(0, hitWindow50 * 2 * pxPerMs);
 
-    // Miss detection for unjudged hit objects (only during active song playback, NEVER while paused)
-    const isPlayingState = isPlay && !isPause;
-    if (isPlayingState && lastCombo === 0) {
-        for (let i = 0; i < hitObjects.length; i++) {
-            const note = hitObjects[i];
-            if (!note.judged) {
-                const tooLateTime = note.startTime + hitWindow50;
-                if (currentTime > tooLateTime + tosuLeeway) {
-                    note.judged = true;
-                    if (!note.isMissed) {
-                        note.isMissed = true;
-                        note.missedAt = tooLateTime;
-                        ourDetectedMissCount++;
-                    }
-                }
-            }
-        }
-    }
+    // T17: per-frame miss detection REMOVED — rejudgeTimeline (websocket-connection.js)
+    // derives every miss from the missEvents/breakEvents evidence. The old comboDropActive
+    // per-frame gate is dead.
 
     // Beat lines / timing grid
     if (timingPoints.length > 0) {
@@ -293,6 +297,9 @@ function draw() {
         }
     }
 
+    // T7 DEBUG: per-note number labels, drawn in a final topmost pass below.
+    const debugNoteLabels = [];
+
     // Render Hit Objects (circles, sliders, spinners)
     for (let i = 0; i < hitObjects.length; i++) {
         const note = hitObjects[i];
@@ -303,9 +310,15 @@ function draw() {
         let alpha = xEnd < 100 ? Math.max(0, xEnd / 100) : 1;
         ctx.globalAlpha = Math.max(0.1, alpha);
 
-        const col = (comboColors.length > 0) 
-            ? comboColors[note.comboColorIndex % comboColors.length] 
+        const col = (comboColors.length > 0)
+            ? comboColors[note.comboColorIndex % comboColors.length]
             : DEFAULT_COMBO_COLORS[0];
+
+        // T18: the judgment VISUALS (hit lane, gray) reveal only when the note has
+        // CROSSED the (delayed) playhead — not the instant the judgment lands in
+        // real time (that would be ~200ms early). Debug labels may still show ahead.
+        const _crossed = note.startTime <= currentTime;
+        const _visMissed = _crossed ? note.isMissed : false;
 
         // Judgment meter bar
         if ((note.type === 'circle' || note.type === 'slider') && SHOW_JUDGMENT_BARS) {
@@ -345,8 +358,13 @@ function draw() {
         }
 
         if (note.type === 'slider') {
-            drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiameterPx);
-            
+            // T18: the slider's miss/break visuals reveal only after crossing the
+            // playhead (a broken slider's head→break keeps its hit style — the
+            // split is inside drawSmoothSlider).
+            drawSmoothSlider(note, xStart, xEnd, currentTime, pxPerMs, judgmentDiameterPx, _visMissed);
+
+            // T17: ticks after the break moment render gray (the body split is inside drawSmoothSlider).
+            const tBreakTick = (note.responsibleBreak && note.responsibleBreak.time >= note.startTime && note.responsibleBreak.time <= note.endTime) ? note.responsibleBreak.time : null;
             let currentBeatLength = 600;
             for (let tpi = 0; tpi < timingPoints.length; tpi++) {
                 const tp = timingPoints[tpi];
@@ -368,7 +386,8 @@ function draw() {
                     const tickY = getSnakyY(note, tickTime, currentTime);
 
                     let tickCanvas = null;
-                    if (note.isMissed && hasSliderTickTexture) {
+                    const _tickMissed = _visMissed || (tBreakTick !== null && tickTime > tBreakTick); // T17/T18: tail ticks gray, revealed on crossing
+                    if (_tickMissed && hasSliderTickTexture) {
                         tickCanvas = sliderTickImg;
                     } else if (hasSliderTickTexture && tintedSliderTicks.length > 0) {
                         tickCanvas = tintedSliderTicks[note.comboColorIndex % tintedSliderTicks.length];
@@ -381,7 +400,7 @@ function draw() {
                         const tickH = tickCanvas.height * tickScaleFactor;
                         ctx.drawImage(tickCanvas, tickX - tickW / 2, tickY - tickH / 2, tickW, tickH);
                     } else {
-                        ctx.fillStyle = note.isMissed ? `rgba(100,100,100,0.5)` : `rgb(${col.r},${col.g},${col.b})`;
+                        ctx.fillStyle = _tickMissed ? `rgba(100,100,100,0.5)` : `rgb(${col.r},${col.g},${col.b})`;
                         ctx.beginPath();
                         ctx.arc(tickX, tickY, 5.5, 0, Math.PI * 2);
                         ctx.fill();
@@ -390,22 +409,34 @@ function draw() {
                 }
             }
         } else if (note.type === 'spinner') {
-            ctx.fillStyle = note.isMissed ? `rgba(100,100,100,0.3)` : `rgba(${col.r},${col.g},${col.b},0.6)`;
+            ctx.fillStyle = _visMissed ? `rgba(100,100,100,0.3)` : `rgba(${col.r},${col.g},${col.b},0.6)`; // T18: revealed on crossing
             ctx.fillRect(xStart, Y_CENTERED - SPINNER_BAR_HEIGHT/2, xEnd - xStart, SPINNER_BAR_HEIGHT);
         }
 
         if (note.type === 'circle' || note.type === 'slider') {
-            const yPos = note.type === 'slider' 
-                ? getSnakyY(note, note.startTime, currentTime) 
-                : getHitCircleY(note);
-                
-            drawHitCircle(xStart, note.comboColorIndex, note.isMissed, judgmentDiameterPx, yPos - Y_CENTERED);
+            // T18: a circle reveals its hit lane only after crossing the playhead.
+            const yPos = note.type === 'slider'
+                ? getSnakyY(note, note.startTime, currentTime)
+                : (_crossed ? getHitCircleY(note) : Y_CENTERED);
+
+            drawHitCircle(xStart, note.comboColorIndex, _visMissed || !!note.responsibleBreak, judgmentDiameterPx, yPos - Y_CENTERED); // T25: a body-break slider's head circle grays too (not just the track)
+
+        }
+
+        // T7 DEBUG: collect per-note numbers for a FINAL topmost pass (drawn after the
+        // playhead so a nearby note's circle can never paint over them).
+        if (note.type === 'circle' || note.type === 'slider') {
+            const _judgeT = (typeof note.actualHitTime !== 'undefined' && note.actualHitTime !== null) ? note.actualHitTime.toFixed(0) : '-';
+            const _drift = (typeof note.driftMs !== 'undefined' && note.driftMs !== null) ? note.driftMs.toFixed(1) : '-';
+            const _err = (typeof note.hitError !== 'undefined' && note.hitError !== null) ? note.hitError.toFixed(0) : '-';
+            const _judgedBy = (typeof note.judgedBy !== 'undefined') ? note.judgedBy : '-';
+            debugNoteLabels.push({ x: xStart, t: note.startTime.toFixed(0), j: _judgeT, e: _err, d: _drift, s: _judgedBy });
         }
         ctx.globalAlpha = 1;
     }
 
     drawKeyHistory(currentTime, pastMs, futureMs, pxPerMs);
-    drawKeyBoxes();
+    drawKeyBoxes(liveTimeNow); // T18: boxes reveal when the press crosses the delayed playhead
 
     // Playhead line
     ctx.strokeStyle = '#0ff'; ctx.lineWidth = 4;
@@ -422,8 +453,9 @@ function draw() {
     const safeOD = (typeof beatmapOD === 'number' && !isNaN(beatmapOD)) ? beatmapOD : 8.0;
     const safe50w = (typeof hitWindow50 === 'number' && !isNaN(hitWindow50)) ? hitWindow50 : 119.5;
     const safeLiveTime = (typeof lastCommonLiveTime === 'number' && !isNaN(lastCommonLiveTime)) ? lastCommonLiveTime : 0;
+    const safeLiveNow = safeLiveTime + ((typeof lastCommonRealTime === 'number' && lastCommonRealTime > 0) ? (now - lastCommonRealTime) * currentSpeed : 0); // T17: undelayed live time
     
-    const debugInfo = `${(safeTime/1000).toFixed(2)}s | State: ${gameStateName || 'unknown'} | OD: ${safeOD.toFixed(1)} | 50w: ${safe50w.toFixed(1)}ms | liveTime: ${safeLiveTime.toFixed(0)}ms | drift: ${((typeof hitErrorDriftSamples !== 'undefined' && hitErrorDriftSamples.length) ? (hitErrorDriftSamples.reduce((a,b)=>a+b,0)/hitErrorDriftSamples.length).toFixed(1) : '0.0')}ms (${(typeof hitErrorDriftSamples !== 'undefined' ? hitErrorDriftSamples.length : 0)}/10)`;
+    const debugInfo = `${(safeTime/1000).toFixed(2)}s | State: ${gameStateName || 'unknown'} | OD: ${safeOD.toFixed(1)} | 50w: ${safe50w.toFixed(1)}ms | liveTime: ${safeLiveTime.toFixed(0)}ms | drift: ${((typeof hitErrorDriftSamples !== 'undefined' && hitErrorDriftSamples.length) ? (hitErrorDriftSamples.reduce((a,b)=>a+b,0)/hitErrorDriftSamples.length).toFixed(1) : '0.0')}ms (${(typeof hitErrorDriftSamples !== 'undefined' ? hitErrorDriftSamples.length : 0)}/10) | live: ${safeLiveNow.toFixed(0)}ms`;
     ctx.fillText(debugInfo, 15, canvas.height - 10);
 
     if (SHOW_DEBUG_PANEL) {
@@ -443,6 +475,46 @@ function draw() {
         ctx.fillText(`Frozen: ${commonPacketsSinceAdvance >= 2 ? 'YES' : 'no'} (packets: ${commonPacketsSinceAdvance})`, canvas.width - 290, y); y += 20;
     }
 
+
+    // T7 DEBUG: bright-red miss counter (bottom-right) — gated by SHOW_T7_DEBUG
+    if (typeof SHOW_T7_DEBUG !== 'undefined' && SHOW_T7_DEBUG) {
+        ctx.save();
+        ctx.globalAlpha = 1;
+        ctx.font = 'bold 16px monospace';
+        ctx.fillStyle = '#ff2020';
+        ctx.textAlign = 'right';
+        // T17: judgment-index summary — WHAT judged each note (the array's state).
+        const _jb = { 'precise-hit-error': 0, 'common-hit-error': 0, 'miss-event': 0, 'break-event': 0, 'button-press': 0, 'none': 0 };
+        for (let _si = 0; _si < hitObjects.length; _si++) {
+            const _s = hitObjects[_si].judgedBy;
+            if (_jb[_s] !== undefined) _jb[_s]++;
+        }
+        ctx.font = '12px monospace';
+        ctx.fillStyle = '#00ff41';
+        ctx.fillText(`precise:${_jb['precise-hit-error']} common:${_jb['common-hit-error']} miss:${_jb['miss-event']} break:${_jb['break-event']} press:${_jb['button-press']} none:${_jb['none']} | ev m:${missEvents.length} b:${breakEvents.length}`, canvas.width - 15, canvas.height - 34);
+        ctx.fillText('MISSES: ' + (typeof ourDetectedMissCount !== 'undefined' ? ourDetectedMissCount : 0), canvas.width - 15, canvas.height - 12);
+        ctx.restore();
+    }
+
+    // T7 DEBUG: per-note numbers — FINAL topmost pass (drawn after the playhead so
+    // nothing paints over them). Gated by SHOW_T7_DEBUG.
+    if (typeof SHOW_T7_DEBUG !== 'undefined' && SHOW_T7_DEBUG && debugNoteLabels.length > 0) {
+        ctx.save();
+        ctx.globalAlpha = 1;
+        ctx.font = '11px monospace';
+        ctx.fillStyle = '#00ff41';
+        ctx.textAlign = 'left';
+        for (let _di = 0; _di < debugNoteLabels.length; _di++) {
+            const _dl = debugNoteLabels[_di];
+            // T17 rows: t=startTime, j=hitTime, e=hitError, d=drift, s=judgedBy (judgment index)
+            ctx.fillText(_dl.t, _dl.x, Y_CENTERED - 84);
+            ctx.fillText(_dl.j, _dl.x, Y_CENTERED - 72);
+            ctx.fillText(_dl.e, _dl.x, Y_CENTERED - 60);
+            ctx.fillText(_dl.d, _dl.x, Y_CENTERED - 48);
+            ctx.fillText(_dl.s, _dl.x, Y_CENTERED - 36);
+        }
+        ctx.restore();
+    }
     requestAnimationFrame(draw);
 }
 

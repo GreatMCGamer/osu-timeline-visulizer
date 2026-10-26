@@ -37,6 +37,7 @@ const SPINNER_BAR_HEIGHT = 40;
 const TARGET_FPS = 480;
 const SHOW_DEBUG_PANEL = false;
 const SHOW_JUDGMENT_BARS = false;
+const SHOW_T7_DEBUG = true; // T7 debug overlay: per-note numbers + red miss counter + alternating press colors. Set false to hide all of it.
 
 // ──────── KEYPRESS VISUALIZATION CONFIG ────────
 const KEY_LINE_THICKNESS = 20;
@@ -103,6 +104,9 @@ let keyStrokes = [];
 let activeStrokes = { k1: null, k2: null, m1: null, m2: null };
 let lastCounts = { k1: 0, k2: 0, m1: 0, m2: 0 };
 let keyBoxStates = { k1: false, k2: false, m1: false, m2: false };
+let lanePressCounter = { 0: 0, 1: 0 }; // T7 debug: per-lane press sequence (alternating color)
+let pendingStrokes = []; // Plan B: buffered key strokes awaiting their hit error
+let pendingErrors = []; // Plan B: buffered hit errors awaiting their key stroke
 
 let hitCircleImg = null;
 let hitCircleOverlayImg = null;
@@ -142,3 +146,13 @@ let lastCombo = 0;
 let ourDetectedMissCount = 0;
 let hitErrorDriftSamples = []; // rolling window of |estNoteStart - note.startTime| for accuracy debug
 let lastGameMissCount = 0; // last seen game miss count (hits["0"]) from the common packet — drives consecutive-miss detection
+let lastComboDropTime = -1; // T10: map time of the last unexplained combo drop (slider-break candidate); -1 = none pending
+// T17: evidence lists — the evidence layer (one entry per game event).
+// rejudgeTimeline() (websocket-connection.js) assigns each event to a note and
+// derives every note's final state: hit error (precise/common) > break > miss > press.
+let missEvents = [];  // game-registered misses (hits["0"] increments): { time, note }
+let breakEvents = []; // arbitrated slider breaks (combo drop w/o increment): { time, note }
+let lastMissIncrementTime = -1; // T11: map time of the last hits["0"] increment
+let lastMissIncrementCommonSeq = -1; // T11: common-packet seq of the last hits["0"] increment
+let comboDropCommonSeq = -1; // T11: common-packet seq of the pending unexplained combo drop; -1 = none
+let commonPacketSeq = 0; // T11: common-packet clock (100ms cadence) — ≤2-packet arbitration

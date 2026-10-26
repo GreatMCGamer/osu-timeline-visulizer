@@ -27,6 +27,10 @@ And Now when you start playing a map, the timeline will render.
 6. Miss detection logic determines when objects are missed
 7. All visual elements are rendered on the canvas in real-time
 
+### 200ms render delay
+
+The timeline is drawn **200ms behind live time**. This is deliberate: it lets every piece of a note's judgment (hit error, combo break, miss, key press) settle before it's painted, which prevents notes from flickering or jumping as late-arriving data corrects them. In practice the playhead sits about 200ms behind the game's current time, so a note's final state (its lane, gray-out, and click line) only appears once it crosses the judgment line. Debug overlays are exempt and may update immediately.
+
 ## Installation
 
 1. Clone or download this repository
@@ -54,3 +58,17 @@ Contributions are welcome! Please follow these steps:
 
 - OBS
 - tosu
+
+## Skins
+
+The visualizer reads its skin from **tosu** first (it fetches `skin.ini` and the hit-circle / slider textures from tosu's skin endpoint, so the combo colors and textures match the skin you actually have loaded in-game).
+
+When tosu has no skin available, it falls back to the local **`default_skin/`** folder. You can drop your own skin files there to control how the visualizer looks when tosu isn't providing one:
+
+| File in `default_skin/` | Used for |
+| --- | --- |
+| `hitcircle@2x.png` | Hit circle |
+| `hitcircleoverlay@2x.png` | Hit circle overlay |
+| `sliderscorepoint@2x.png` | Slider ticks (score points) |
+
+Files are loaded at `@2x` (no upscaling). A tosu-provided texture always takes priority, so the local folder is purely a fallback. The folder is gitignored — your local skin assets are not tracked.

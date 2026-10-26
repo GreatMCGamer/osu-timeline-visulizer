@@ -62,25 +62,24 @@ function getSnakyY(note, targetTime, currentTime) {
         ? note.actualHitTime
         : note.startTime;
 
-    const isJudged = note.judged && !note.isMissed;
+    // T22: a JUDGED slider ALWAYS snakes — whether the head was hit (body break:
+    // the head keeps its lane, the body follows the key presses) or the head was
+    // MISSED (it starts centered, then still snakes on the key presses). Color is
+    // handled separately in the drawing layer (gray), so we no longer early-return
+    // for missed sliders.
     let hitLaneY = Y_CENTERED;
-    if (isJudged && typeof note.hitLane !== 'undefined' && note.hitLane !== -1) {
+    if (typeof note.hitLane !== 'undefined' && note.hitLane !== -1) {
         hitLaneY = note.hitLane === 0 
             ? Y_CENTERED - laneDist 
             : Y_CENTERED + laneDist;
-    } else if (!isJudged) {
-        return Y_CENTERED;
     }
 
     // ──────── SNAKY LOGIC AFTER JUDGMENT LINE ────────
-    // calculationTime determines how far into the simulation we go (capped at targetTime, currentTime, and missedAt)
+    // calculationTime: how far into the simulation we go (capped at targetTime and
+    // currentTime). T22: no missedAt cap — a broken/missed slider's whole body snakes.
     let calculationTime = targetTime;
     if (typeof currentTime === 'number') {
         calculationTime = Math.min(calculationTime, currentTime);
-    }
-    if (note.isMissed) {
-        const missTime = note.missedAt || note.startTime;
-        calculationTime = Math.min(calculationTime, missTime);
     }
 
     let currentY = hitLaneY;
@@ -92,7 +91,7 @@ function getSnakyY(note, targetTime, currentTime) {
         // Force the head + any body points BEFORE the actual hit time
         // to stay at the hit lane (retroactive snap for late hits).
         // This eliminates any visual discontinuity between head and path start.
-        if (isJudged && t <= hitTime) {
+        if (t <= hitTime) {
             targetY = hitLaneY;
         }
 
