@@ -213,6 +213,7 @@ function processKeyAndHitData(keysData, hitErrorsData, liveTime) {
 
         // Nearest unjudged note to the estimated hit time
         let bestObj = null;
+        let bestIdx = -1; // T28: the note's index (j is block-scoped in the loop below)
         let minDiff = Infinity;
         const searchTolerance = Math.max(150, (typeof hitWindow50 !== 'undefined' ? hitWindow50 : 150) + 50);
         for (let j = 0; j < hitObjects.length; j++) {
@@ -226,6 +227,7 @@ function processKeyAndHitData(keysData, hitErrorsData, liveTime) {
             if (diff < searchTolerance && diff < minDiff) {
                 minDiff = diff;
                 bestObj = obj;
+                bestIdx = j; // T28: capture the index (j is block-scoped to the loop)
             }
         }
 
@@ -239,6 +241,17 @@ function processKeyAndHitData(keysData, hitErrorsData, liveTime) {
             bestObj.driftMs = minDiff; // T7 debug: per-note drift (|obj.startTime - estNoteStart|)
             hitErrorDriftSamples.push(minDiff);
             if (hitErrorDriftSamples.length > 10) hitErrorDriftSamples.shift();
+
+            // T28: pairing-repair bookkeeping. The flag starts true on every note;
+            // a successful pair proves the notes are contiguous, so the NEXT note
+            // needs no repair check. If THIS note's flag is still active when it
+            // pairs, its predecessor never paired normally (a desynk gap) - a ghost
+            // note may exist, so repair every hit-error note that has no lane.
+            const wasActive = bestObj.checkPreviousPairing;
+            const nx = hitObjects[bestIdx + 1];
+            if (nx) nx.checkPreviousPairing = false;
+            if (wasActive) repairLanes();
+            bestObj.checkPreviousPairing = false;
 
             // Align the stroke to the true hit time and mark it consumed
             ps.stroke.matched = true;
@@ -318,6 +331,34 @@ function processKeyAndHitData(keysData, hitErrorsData, liveTime) {
     //    note is ever re-opened by a packet. Restart / quick-retry is handled by
     //    resetTimelineState (state change, new checksum, or the §4 -500ms live-time
     //    regression), which is the only path that rewrites the whole timeline.
+}
+
+// T28: repair hit-error notes that never got a lane (the "ghost" note). These are
+// notes the 3b error-only fallback judged after the stroke had expired the 6ms
+// desynk window (OBS lag). The stroke is still in the keyStrokes press history,
+// just unmatched. Pair each such note to its closest unconsumed stroke within a
+// 500ms cap and consume that stroke so one press cannot claim two notes. Runs
+// only when a note pairs while its checkPreviousPairing flag is still active -
+// not every frame or packet.
+const REPAIR_SEARCH_CAP_MS = 500;
+function repairLanes() {
+    for (let j = 0; j < hitObjects.length; j++) {
+        const n = hitObjects[j];
+        if (typeof n.hitError === 'undefined' || n.hitLane !== -1 || n.isMissed) continue;
+        if (typeof n.actualHitTime !== 'number') continue; // no click time to match against
+        let bestSt = null;
+        let bestD = Infinity;
+        for (let k = 0; k < keyStrokes.length; k++) {
+            const st = keyStrokes[k];
+            if (st.matched || st.claimedBy !== undefined) continue; // already consumed
+            const d = Math.abs(st.startTime - n.actualHitTime);
+            if (d <= REPAIR_SEARCH_CAP_MS && d < bestD) { bestD = d; bestSt = st; }
+        }
+        if (bestSt) {
+            n.hitLane = (bestSt.key === 'k1' || bestSt.key === 'm1') ? 0 : 1;
+            bestSt.matched = true; // consumed - one press cannot claim two notes
+        }
+    }
 }
 
 function parseWebsocketPayload(data) {

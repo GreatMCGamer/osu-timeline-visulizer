@@ -155,7 +155,11 @@ function parseOsuFile(osuText) {
                         endTime = parseInt(parts[5]) || time + 1000;
                     }
                     
-                    objs.push({ startTime: time, endTime, type: noteType, comboColorIndex: currentComboIndex, judged: false, isMissed: false, hitLane: -1 });
+                    // T28: checkPreviousPairing is ON by default on every note. The
+                    // matcher flips it true again on the next note after each
+                    // successful pair; repairLanes() consumes it when the flagged
+                    // note gets paired (re-pairing any hit-error notes left on no lane).
+                    objs.push({ startTime: time, endTime, type: noteType, comboColorIndex: currentComboIndex, judged: false, isMissed: false, hitLane: -1, checkPreviousPairing: true });
                 }
             }
         }
