@@ -30,6 +30,7 @@ And Now when you start playing a map, the timeline will render.
 ### 200ms render delay
 
 The timeline is drawn **200ms behind live time**. This is deliberate: it lets every piece of a note's judgment (hit error, combo break, miss, key press) settle before it's painted, which prevents notes from flickering or jumping as late-arriving data corrects them. In practice the playhead sits about 200ms behind the game's current time, so a note's final state (its lane, gray-out, and click line) only appears once it crosses the judgment line. Debug overlays are exempt and may update immediately.
+In OBS use Render delay to sync with gameplay for video or livestreams.
 
 ## Installation
 
@@ -45,14 +46,6 @@ To use this visualization:
 2. Open index.html in a browser
 3. Select an osu! map to visualize
 4. The visualization will automatically start showing the beatmap timeline
-
-## Contributing
-
-Contributions are welcome! Please follow these steps:
-1. Fork the repository
-2. Create a new branch for your feature
-3. Make your changes
-4. Submit a pull request with a clear description of your changes
 
 ## Dependencies
 
@@ -72,3 +65,4 @@ When tosu has no skin available, it falls back to the local **`default_skin/`** 
 | `sliderscorepoint@2x.png` | Slider ticks (score points) |
 
 Files are loaded at `@2x` (no upscaling). A tosu-provided texture always takes priority, so the local folder is purely a fallback. The folder is gitignored — your local skin assets are not tracked.
+Use the Folder for osu!Lazer.
