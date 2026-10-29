@@ -66,3 +66,10 @@ When tosu has no skin available, it falls back to the local **`default_skin/`** 
 
 Files are loaded at `@2x` (no upscaling). A tosu-provided texture always takes priority, so the local folder is purely a fallback. The folder is gitignored — your local skin assets are not tracked.
 Use the Folder for osu!Lazer.
+
+## Warning
+
+Yes, this project was fully vibe coded. And it took a lot of back and fourth to get it to work.
+It is not perfect, because tosu can't provide perfect information.
+Project is meant to be used with precise packets at 2ms and common packets at 100ms.
+No, the project does not currently compensate for lag spikes.
