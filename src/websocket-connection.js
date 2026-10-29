@@ -139,7 +139,7 @@ function processKeyAndHitData(keysData, hitErrorsData, liveTime) {
             if (kCount < lastCounts[k]) {
                 lastCounts[k] = kCount;
                 if (activeStrokes[k]) {
-                    activeStrokes[k].endTime = Math.max(liveTime, activeStrokes[k].startTime + MIN_KEY_PRESS_DURATION_MS);
+                    activeStrokes[k].endTime = Math.max(liveTime, activeStrokes[k].startTime); // T29: no minimum press length (clamp to no-inverted-range only)
                     activeStrokes[k] = null;
                 }
             }
@@ -149,14 +149,14 @@ function processKeyAndHitData(keysData, hitErrorsData, liveTime) {
             if (hasNewPress) {
                 // Close any orphan or previously open stroke for this key before starting a new one
                 if (activeStrokes[k]) {
-                    activeStrokes[k].endTime = Math.max(liveTime, activeStrokes[k].startTime + MIN_KEY_PRESS_DURATION_MS);
+                    activeStrokes[k].endTime = Math.max(liveTime, activeStrokes[k].startTime); // T29: no minimum press length
                     activeStrokes[k] = null;
                 }
 
                 const strokeStartTime = liveTime;
-                const minEnd = strokeStartTime + MIN_KEY_PRESS_DURATION_MS;
+                const minEnd = strokeStartTime; // T29: no minimum press length (a tap may be 0ms, renders as a dot)
 
-                // Create the stroke visually with guaranteed minimum duration
+                // Create the stroke (T29: no minimum duration - a tap may be 0ms, renders as a dot)
                 const stroke = {
                     key: k,
                     startTime: strokeStartTime,
@@ -173,7 +173,7 @@ function processKeyAndHitData(keysData, hitErrorsData, liveTime) {
             } else if (!isDown) {
                 // Key is not down: close active stroke if one exists
                 if (activeStrokes[k]) {
-                    activeStrokes[k].endTime = Math.max(liveTime, activeStrokes[k].startTime + MIN_KEY_PRESS_DURATION_MS);
+                    activeStrokes[k].endTime = Math.max(liveTime, activeStrokes[k].startTime); // T29: no minimum press length
                     activeStrokes[k] = null;
                 }
             }
@@ -257,7 +257,7 @@ function processKeyAndHitData(keysData, hitErrorsData, liveTime) {
             ps.stroke.matched = true;
             ps.stroke.startTime = bestObj.actualHitTime;
             if (ps.stroke.endTime !== null) {
-                ps.stroke.endTime = Math.max(ps.stroke.endTime, ps.stroke.startTime + MIN_KEY_PRESS_DURATION_MS);
+                ps.stroke.endTime = Math.max(ps.stroke.endTime, ps.stroke.startTime); // T29: no minimum press length (clamp to no-inverted-range only)
             }
         }
         // No note within tolerance → the click hit nothing; consume both signals.

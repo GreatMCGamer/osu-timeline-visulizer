@@ -436,7 +436,7 @@ function draw() {
     }
 
     drawKeyHistory(currentTime, pastMs, futureMs, pxPerMs);
-    drawKeyBoxes(liveTimeNow); // T18: boxes reveal when the press crosses the delayed playhead
+    drawKeyBoxes(currentTime); // T30: boxes use the same 200ms-delayed currentTime as the lines (synced)
 
     // Playhead line
     ctx.strokeStyle = '#0ff'; ctx.lineWidth = 4;

@@ -10,7 +10,7 @@ function drawKeyHistory(currentTime, pastMs, futureMs, pxPerMs) {
     const gap = 4;
     const radius = KEY_LINE_THICKNESS / 2;
     const maxLineX = playheadX - gap - radius; 
-    const minVisualLen = Math.max(MIN_KEY_PRESS_LENGTH_PX, MIN_KEY_PRESS_DURATION_MS * pxPerMs);
+    // T29: no minimum line length - a press renders at its true length; a 0ms tap is still a dot (round lineCap, KEY_LINE_THICKNESS wide).
 
     for (let i = 0; i < keyStrokes.length; i++) {
         const stroke = keyStrokes[i];
@@ -24,19 +24,16 @@ function drawKeyHistory(currentTime, pastMs, futureMs, pxPerMs) {
         let effectiveETime = Math.min(eTime, currentTime);
 
         // Culling: Don't draw if off-screen to the left (past)
-        if (Math.max(eTime, sTime + MIN_KEY_PRESS_DURATION_MS) < currentTime - pastMs) continue;
+        if (eTime < currentTime - pastMs) continue;
 
         let rawXStart = playheadX + (sTime - currentTime) * pxPerMs;
         let rawXEnd = playheadX + (effectiveETime - currentTime) * pxPerMs;
 
-        // Guarantee a minimum visual press length regardless of how short the click was
-        if (rawXEnd - rawXStart < minVisualLen) {
-            rawXStart = rawXEnd - minVisualLen;
-        }
+        // T29: minimum-line stretch removed - a press renders at its true length (a tap = a dot).
 
         // Clamp to playhead so lines connect cleanly to key hitboxes
         let drawXEnd = Math.min(rawXEnd, maxLineX);
-        let drawXStart = Math.min(rawXStart, drawXEnd - minVisualLen);
+        let drawXStart = rawXStart; // T29: no min-length stretch - a tap renders as a dot
 
         // Determine lane (K1/M1 = top, K2/M2 = bottom)
         let lane = (stroke.key === 'k1' || stroke.key === 'm1') ? 0 : 1;
@@ -60,11 +57,11 @@ function drawKeyHistory(currentTime, pastMs, futureMs, pxPerMs) {
 /**
  * Draws the interactive hit boxes at the playhead position.
  */
-function drawKeyBoxes(liveTimeNow) {
+function drawKeyBoxes(currentTime) {
     // T18: the key boxes are part of the DELAYED render (RENDER_DELAY_MS in draw()).
-    // A press reveals only when it has crossed the (delayed) playhead in REAL time —
+    // A press reveals only when it has crossed the (delayed) playhead in delayed time —
     // reading keyBoxStates directly would light the box ~200ms early.
-    const _lt = (typeof liveTimeNow === 'number') ? liveTimeNow : (lastCommonLiveTime || 0);
+    const _lt = (typeof currentTime === 'number') ? currentTime : (lastCommonLiveTime || 0);
     const _box = { k1: false, k2: false, m1: false, m2: false };
     for (let i = 0; i < keyStrokes.length; i++) {
         const st = keyStrokes[i];

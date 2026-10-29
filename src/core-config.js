@@ -44,8 +44,8 @@ const KEY_LINE_THICKNESS = 20;
 const KEY_BOX_SIZE = 24;
 const KEY_BOX_Y = 25;         
 const KEY_BOX_SPACING = 60;   
-const MIN_KEY_PRESS_DURATION_MS = 65; // Minimum time duration in ms guaranteed to render
-const MIN_KEY_PRESS_LENGTH_PX = 24;   // Minimum visual line length in pixels regardless of click brevity   
+const MIN_KEY_PRESS_DURATION_MS = 65; // T29: LEGACY - no longer enforced anywhere (render + data minimums removed). Kept for reference only.
+const MIN_KEY_PRESS_LENGTH_PX = 0;   // T29: no minimum line length - a tap renders as a dot (round lineCap, KEY_LINE_THICKNESS wide)   
 
 const TITLE_FONT_SIZE = 50;
 
