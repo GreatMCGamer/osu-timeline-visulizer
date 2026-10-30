@@ -37,7 +37,7 @@ const SPINNER_BAR_HEIGHT = 40;
 const TARGET_FPS = 480;
 const SHOW_DEBUG_PANEL = false;
 const SHOW_JUDGMENT_BARS = false;
-const SHOW_T7_DEBUG = true; // T7 debug overlay: per-note numbers + red miss counter + alternating press colors. Set false to hide all of it.
+const SHOW_T7_DEBUG = false; // T7 debug overlay: per-note numbers + red miss counter + alternating press colors. Set false to hide all of it.
 
 // ──────── KEYPRESS VISUALIZATION CONFIG ────────
 const KEY_LINE_THICKNESS = 20;
@@ -148,7 +148,7 @@ let hitErrorDriftSamples = []; // rolling window of |estNoteStart - note.startTi
 let lastGameMissCount = 0; // last seen game miss count (hits["0"]) from the common packet — drives consecutive-miss detection
 let lastComboDropTime = -1; // T10: map time of the last unexplained combo drop (slider-break candidate); -1 = none pending
 // T17: evidence lists — the evidence layer (one entry per game event).
-// rejudgeTimeline() (websocket-connection.js) assigns each event to a note and
+// rejudgeTimeline() (miss-logic.js) assigns each event to a note and
 // derives every note's final state: hit error (precise/common) > break > miss > press.
 let missEvents = [];  // game-registered misses (hits["0"] increments): { time, note }
 let breakEvents = []; // arbitrated slider breaks (combo drop w/o increment): { time, note }

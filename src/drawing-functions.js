@@ -266,7 +266,7 @@ function draw() {
     const tosuLeeway = 350; 
     const judgmentDiameterPx = Math.max(0, hitWindow50 * 2 * pxPerMs);
 
-    // T17: per-frame miss detection REMOVED — rejudgeTimeline (websocket-connection.js)
+    // T17: per-frame miss detection REMOVED — rejudgeTimeline (miss-logic.js)
     // derives every miss from the missEvents/breakEvents evidence. The old comboDropActive
     // per-frame gate is dead.
 
@@ -456,7 +456,7 @@ function draw() {
     const safeLiveNow = safeLiveTime + ((typeof lastCommonRealTime === 'number' && lastCommonRealTime > 0) ? (now - lastCommonRealTime) * currentSpeed : 0); // T17: undelayed live time
     
     const debugInfo = `${(safeTime/1000).toFixed(2)}s | State: ${gameStateName || 'unknown'} | OD: ${safeOD.toFixed(1)} | 50w: ${safe50w.toFixed(1)}ms | liveTime: ${safeLiveTime.toFixed(0)}ms | drift: ${((typeof hitErrorDriftSamples !== 'undefined' && hitErrorDriftSamples.length) ? (hitErrorDriftSamples.reduce((a,b)=>a+b,0)/hitErrorDriftSamples.length).toFixed(1) : '0.0')}ms (${(typeof hitErrorDriftSamples !== 'undefined' ? hitErrorDriftSamples.length : 0)}/10) | live: ${safeLiveNow.toFixed(0)}ms`;
-    ctx.fillText(debugInfo, 15, canvas.height - 10);
+    if (typeof SHOW_T7_DEBUG !== 'undefined' && SHOW_T7_DEBUG) ctx.fillText(debugInfo, 15, canvas.height - 10); // gated: live debug line hidden when T7 debug is off
 
     if (SHOW_DEBUG_PANEL) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
